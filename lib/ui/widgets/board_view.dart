@@ -110,7 +110,6 @@ class _BoardPainter extends CustomPainter {
     }
 
     // Placed rectangles.
-    final consumedClues = <int>{};
     for (final p in placed) {
       final gr = p.rect;
       final rect = Rect.fromLTWH(
@@ -127,21 +126,6 @@ class _BoardPainter extends CustomPainter {
         ..strokeWidth = cell * 0.02
         ..color = Colors.black.withValues(alpha: 0.12);
       canvas.drawRRect(rrect, border);
-
-      final inside = <int>[];
-      for (var i = 0; i < puzzle.clues.length; i++) {
-        final clue = puzzle.clues[i];
-        if (gr.containsCell(clue.row, clue.col)) inside.add(i);
-      }
-      if (inside.length == 1) {
-        consumedClues.add(inside.first);
-        _drawNumber(
-          canvas,
-          puzzle.clues[inside.first].value,
-          rect.center,
-          colors.rectText,
-        );
-      }
     }
 
     // Drag preview.
@@ -164,15 +148,17 @@ class _BoardPainter extends CustomPainter {
       canvas.drawRRect(rrect, border);
     }
 
-    // Clues not inside a single-owner rectangle: draw in their own cell.
-    for (var i = 0; i < puzzle.clues.length; i++) {
-      if (consumedClues.contains(i)) continue;
-      final clue = puzzle.clues[i];
+    // Clue numbers always stay in their original cell.
+    for (final clue in puzzle.clues) {
       final center = Offset(
         clue.col * cell + cell / 2,
         clue.row * cell + cell / 2,
       );
-      _drawNumber(canvas, clue.value, center, colors.cellText);
+      final owners = placed
+          .where((p) => p.rect.containsCell(clue.row, clue.col))
+          .length;
+      final color = owners == 1 ? colors.rectText : colors.cellText;
+      _drawNumber(canvas, clue.value, center, color);
     }
   }
 
