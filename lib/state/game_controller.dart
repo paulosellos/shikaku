@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../logic/generator.dart';
 import '../logic/validator.dart';
+import '../models/difficulty.dart';
 import '../models/puzzle.dart';
 
 /// Holds the live state of one puzzle: placed rectangles, the current drag
@@ -13,6 +14,7 @@ class GameController extends ChangeNotifier {
 
   bool hapticsEnabled = true;
 
+  Difficulty difficulty;
   late Puzzle _puzzle;
   final List<PlacedRect> _placed = [];
   final List<List<PlacedRect>> _history = [];
@@ -34,11 +36,12 @@ class GameController extends ChangeNotifier {
   bool get canUndo => _history.isNotEmpty;
   Duration get elapsed => _stopwatch.elapsed;
 
-  GameController(int level) {
+  GameController(int level, {this.difficulty = Difficulty.easy}) {
     _load(level);
   }
 
-  void loadLevel(int level) {
+  void loadLevel(int level, {Difficulty? difficulty}) {
+    if (difficulty != null) this.difficulty = difficulty;
     _load(level);
     notifyListeners();
   }

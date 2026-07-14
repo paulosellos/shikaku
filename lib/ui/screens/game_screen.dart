@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/difficulty.dart';
 import '../../state/app_scope.dart';
 import '../../state/game_controller.dart';
 import '../../theme/app_theme.dart';
@@ -47,7 +48,7 @@ class _GameScreenState extends State<GameScreen> {
         pageBuilder: (_, __, ___) => WinOverlay(
           solvedLevel: scope.game.puzzle.level,
           onContinue: (nextLevel) {
-            scope.settings.currentLevel = nextLevel;
+            scope.settings.setLevelFor(scope.game.difficulty, nextLevel);
             scope.game.loadLevel(nextLevel);
             Navigator.of(context).pop();
           },
@@ -80,11 +81,9 @@ class _GameScreenState extends State<GameScreen> {
             return Column(
               children: [
                 _Header(
-                  title: 'Shikaku $level',
+                  title: 'Shikaku ${game.difficulty.label} $level',
                   colors: colors,
-                  onBack: () => game.loadLevel(
-                    level > 1 ? level - 1 : 1,
-                  ),
+                  onBack: () => Navigator.of(context).maybePop(),
                   onHelp: () => _showHelp(context, colors),
                   onSettings: () => SettingsSheet.show(
                     context,
@@ -92,7 +91,7 @@ class _GameScreenState extends State<GameScreen> {
                     game: game,
                   ),
                   onSkip: () {
-                    settings.currentLevel = level + 1;
+                    settings.setLevelFor(game.difficulty, level + 1);
                     game.loadLevel(level + 1);
                   },
                 ),

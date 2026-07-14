@@ -4,14 +4,16 @@ import 'state/app_scope.dart';
 import 'state/game_controller.dart';
 import 'state/settings_controller.dart';
 import 'theme/app_theme.dart';
-import 'ui/screens/game_screen.dart';
+import 'ui/screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final settings = SettingsController();
   await settings.load();
-  final game = GameController(settings.currentLevel)
-    ..hapticsEnabled = settings.haptics;
+  final game = GameController(
+    settings.levelFor(settings.lastDifficulty),
+    difficulty: settings.lastDifficulty,
+  )..hapticsEnabled = settings.haptics;
   runApp(ShikakuApp(settings: settings, game: game));
 }
 
@@ -35,7 +37,7 @@ class ShikakuApp extends StatelessWidget {
             themeMode: settings.themeMode,
             theme: AppTheme.build(Brightness.light),
             darkTheme: AppTheme.build(Brightness.dark),
-            home: const GameScreen(),
+            home: const SplashScreen(),
           ),
         );
       },
