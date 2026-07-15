@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/difficulty.dart';
+import '../models/puzzle_difficulty.dart';
 
 /// User preferences shown in the Settings sheet, persisted with
 /// shared_preferences.
@@ -10,27 +10,27 @@ class SettingsController extends ChangeNotifier {
   static const _kHaptics = 'haptics';
   static const _kShowTimer = 'show_timer';
   static const _kShowSizeCounter = 'show_size_counter';
-  static const _kLastDifficulty = 'last_difficulty';
+  static const _kLastPuzzleDifficulty = 'last_difficulty';
   static const _kLevelPrefix = 'current_level_';
 
   ThemeMode _themeMode = ThemeMode.system;
   bool _haptics = true;
   bool _showTimer = false;
   bool _showSizeCounter = false;
-  Difficulty _lastDifficulty = Difficulty.easy;
-  final Map<Difficulty, int> _levels = {
-    Difficulty.easy: 1,
-    Difficulty.medium: 1,
-    Difficulty.hard: 1,
+  PuzzleDifficulty _lastDifficulty = PuzzleDifficulty.medium;
+  final Map<PuzzleDifficulty, int> _levels = {
+    PuzzleDifficulty.easy: 1,
+    PuzzleDifficulty.medium: 1,
+    PuzzleDifficulty.hard: 1,
   };
 
   ThemeMode get themeMode => _themeMode;
   bool get haptics => _haptics;
   bool get showTimer => _showTimer;
   bool get showSizeCounter => _showSizeCounter;
-  Difficulty get lastDifficulty => _lastDifficulty;
+  PuzzleDifficulty get lastDifficulty => _lastDifficulty;
 
-  int levelFor(Difficulty difficulty) => _levels[difficulty] ?? 1;
+  int levelFor(PuzzleDifficulty difficulty) => _levels[difficulty] ?? 1;
 
   SharedPreferences? _prefs;
 
@@ -42,9 +42,9 @@ class SettingsController extends ChangeNotifier {
     _haptics = p.getBool(_kHaptics) ?? true;
     _showTimer = p.getBool(_kShowTimer) ?? false;
     _showSizeCounter = p.getBool(_kShowSizeCounter) ?? false;
-    _lastDifficulty = Difficulty.values[(p.getInt(_kLastDifficulty) ?? 0)
-        .clamp(0, Difficulty.values.length - 1)];
-    for (final d in Difficulty.values) {
+    _lastDifficulty = PuzzleDifficulty.values[(p.getInt(_kLastPuzzleDifficulty) ?? 1)
+        .clamp(0, PuzzleDifficulty.values.length - 1)];
+    for (final d in PuzzleDifficulty.values) {
       _levels[d] = p.getInt('$_kLevelPrefix${d.name}') ?? 1;
     }
     notifyListeners();
@@ -74,13 +74,13 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  set lastDifficulty(Difficulty value) {
+  set lastDifficulty(PuzzleDifficulty value) {
     _lastDifficulty = value;
-    _prefs?.setInt(_kLastDifficulty, value.index);
+    _prefs?.setInt(_kLastPuzzleDifficulty, value.index);
     notifyListeners();
   }
 
-  void setLevelFor(Difficulty difficulty, int level) {
+  void setLevelFor(PuzzleDifficulty difficulty, int level) {
     _levels[difficulty] = level;
     _prefs?.setInt('$_kLevelPrefix${difficulty.name}', level);
     notifyListeners();

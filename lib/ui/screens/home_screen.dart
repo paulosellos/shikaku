@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../models/difficulty.dart';
+import '../../models/puzzle_difficulty.dart';
 import '../../state/app_scope.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/mascot.dart';
@@ -12,7 +12,7 @@ import 'game_screen.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  void _play(BuildContext context, Difficulty difficulty) {
+  void _play(BuildContext context, PuzzleDifficulty difficulty) {
     final scope = AppScope.of(context);
     final level = scope.settings.levelFor(difficulty);
     scope.settings.lastDifficulty = difficulty;
@@ -101,10 +101,10 @@ class HomeScreen extends StatelessWidget {
                         style: AppTheme.title(colors).copyWith(fontSize: 18)),
                   ),
                   const SizedBox(height: 12),
-                  for (final d in Difficulty.values)
+                  for (final d in PuzzleDifficulty.values)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: _DifficultyCard(
+                      child: _PuzzleDifficultyCard(
                         difficulty: d,
                         level: scope.settings.levelFor(d),
                         selected: d == lastDifficulty,
@@ -125,14 +125,14 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class _DifficultyCard extends StatelessWidget {
-  final Difficulty difficulty;
+class _PuzzleDifficultyCard extends StatelessWidget {
+  final PuzzleDifficulty difficulty;
   final int level;
   final bool selected;
   final AppColors colors;
   final VoidCallback onTap;
 
-  const _DifficultyCard({
+  const _PuzzleDifficultyCard({
     required this.difficulty,
     required this.level,
     required this.selected,
@@ -143,9 +143,9 @@ class _DifficultyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accentColor = switch (difficulty) {
-      Difficulty.easy => RectPalette.at(0, colors.isDark),
-      Difficulty.medium => RectPalette.at(1, colors.isDark),
-      Difficulty.hard => RectPalette.at(7, colors.isDark),
+      PuzzleDifficulty.easy => RectPalette.at(0, colors.isDark),
+      PuzzleDifficulty.medium => RectPalette.at(1, colors.isDark),
+      PuzzleDifficulty.hard => RectPalette.at(7, colors.isDark),
     };
 
     return GestureDetector(

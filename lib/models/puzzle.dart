@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'puzzle_difficulty.dart';
+
 /// An axis-aligned rectangle over grid cells. [row]/[col] is the top-left cell
 /// (inclusive); [right]/[bottom] are exclusive.
 @immutable
@@ -60,17 +62,21 @@ class Clue {
 @immutable
 class Puzzle {
   final int level;
+  final PuzzleDifficulty difficulty;
   final int rows;
   final int cols;
   final List<Clue> clues;
   final List<GridRect> solution;
+  final DifficultyAnalysis? difficultyAnalysis;
 
   const Puzzle({
     required this.level,
+    this.difficulty = PuzzleDifficulty.medium,
     required this.rows,
     required this.cols,
     required this.clues,
     required this.solution,
+    this.difficultyAnalysis,
   });
 
   int get cellCount => rows * cols;

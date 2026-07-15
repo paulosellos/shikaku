@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../models/difficulty.dart';
+import '../../models/puzzle_difficulty.dart';
 import '../../state/app_scope.dart';
 import '../../state/game_controller.dart';
 import '../../theme/app_theme.dart';

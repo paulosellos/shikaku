@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app_info.dart';
+import '../../models/puzzle_difficulty.dart';
 import '../../state/game_controller.dart';
 import '../../state/settings_controller.dart';
 import '../../theme/app_theme.dart';
@@ -101,6 +102,31 @@ class SettingsSheet extends StatelessWidget {
               _sectionLabel('Game', colors),
               _card(
                 colors,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Difficulty',
+                        style: TextStyle(color: colors.headerText, fontSize: 16)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        for (final d in PuzzleDifficulty.values)
+                          Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: d != PuzzleDifficulty.values.last ? 6 : 0,
+                              ),
+                              child: _difficultyOption(colors, d),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              _card(
+                colors,
                 child: _toggleRow(
                   colors,
                   'Show timer',
@@ -191,6 +217,40 @@ class SettingsSheet extends StatelessWidget {
           ),
         ],
       );
+
+  Widget _difficultyOption(AppColors colors, PuzzleDifficulty difficulty) {
+    final selected = game.difficulty == difficulty;
+    return GestureDetector(
+      onTap: () {
+        if (game.difficulty == difficulty) return;
+        settings.lastDifficulty = difficulty;
+        game.loadLevel(
+          settings.levelFor(difficulty),
+          difficulty: difficulty,
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? colors.background : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: selected
+              ? Border.all(color: colors.subtleText.withValues(alpha: 0.4))
+              : null,
+        ),
+        child: Center(
+          child: Text(
+            difficulty.label,
+            style: TextStyle(
+              fontFamily: AppTheme.mono,
+              fontSize: 13,
+              color: selected ? colors.headerText : colors.subtleText,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _themeOption(AppColors colors, String label, ThemeMode mode) {
     final selected = settings.themeMode == mode;
