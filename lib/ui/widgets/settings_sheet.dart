@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app_info.dart';
 import '../../state/game_controller.dart';
 import '../../state/settings_controller.dart';
 import '../../theme/app_theme.dart';
@@ -133,6 +134,17 @@ class SettingsSheet extends StatelessWidget {
                       const Spacer(),
                       Icon(Icons.chevron_right, color: colors.subtleText),
                     ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(
+                  AppInfo.display,
+                  style: TextStyle(
+                    fontFamily: AppTheme.mono,
+                    fontSize: 12,
+                    color: colors.subtleText,
                   ),
                 ),
               ),
