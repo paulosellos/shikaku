@@ -1,11 +1,11 @@
 {
-    "name": "shikaku_game",
-    "short_name": "shikaku_game",
+    "name": "Shikaku",
+    "short_name": "Shikaku",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#17151F",
     "theme_color": "#17151F",
-    "description": "A new Flutter project.",
+    "description": "Draw rectangles. Trust the numbers.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

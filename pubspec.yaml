@@ -57,8 +57,8 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icon/shikaku-icon.png"
   adaptive_icon_background: "#17151F"
-  adaptive_icon_foreground: "assets/icon/shikaku-foreground.png"
-  adaptive_icon_foreground_inset: 18
+  adaptive_icon_foreground: "assets/icon/shikaku-icon.png"
+  adaptive_icon_foreground_inset: 0
   remove_alpha_ios: true
   background_color_ios: "#17151F"
   web:
