@@ -6,15 +6,33 @@ import '../../theme/app_theme.dart';
 
 /// Renders the Shikaku grid and translates pointer gestures into rectangle
 /// drawing / erasing on the [GameController].
-class BoardView extends StatelessWidget {
+class BoardView extends StatefulWidget {
   final GameController game;
   final bool eraseMode;
 
   const BoardView({super.key, required this.game, required this.eraseMode});
 
   @override
+  State<BoardView> createState() => _BoardViewState();
+}
+
+class _BoardViewState extends State<BoardView> {
+  // Real touchscreens rarely report a perfectly still tap: the finger
+  // usually drifts a few pixels between pointer-down and pointer-up. Without
+  // a dead-zone, that drift can cross a cell boundary and silently turn an
+  // intended single-cell tap into a rectangle that doesn't match the cell
+  // the player touched. We lock the preview to the starting cell until the
+  // finger moves past this threshold, then treat it as a genuine drag.
+  static const double _dragDeadZone = 10;
+
+  Offset? _downPosition;
+  bool _dragExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
+    final game = widget.game;
+    final eraseMode = widget.eraseMode;
     return AnimatedBuilder(
       animation: game,
       builder: (context, _) {
@@ -39,21 +57,34 @@ class BoardView extends StatelessWidget {
                   if (eraseMode) {
                     game.eraseAt(r, c);
                   } else {
+                    _downPosition = e.localPosition;
+                    _dragExpanded = false;
                     game.startDrag(r, c);
                   }
                 },
                 onPointerMove: (e) {
                   if (eraseMode) return;
+                  final down = _downPosition;
+                  if (down == null) return;
+                  if (!_dragExpanded) {
+                    final moved = (e.localPosition - down).distance;
+                    if (moved < _dragDeadZone) return;
+                    _dragExpanded = true;
+                  }
                   game.updateDrag(
                     rowFor(e.localPosition.dy),
                     colFor(e.localPosition.dx),
                   );
                 },
                 onPointerUp: (e) {
+                  _downPosition = null;
+                  _dragExpanded = false;
                   if (eraseMode) return;
                   game.endDrag();
                 },
                 onPointerCancel: (e) {
+                  _downPosition = null;
+                  _dragExpanded = false;
                   if (eraseMode) return;
                   game.endDrag();
                 },
@@ -62,6 +93,7 @@ class BoardView extends StatelessWidget {
                     puzzle: puzzle,
                     placed: game.placed,
                     preview: game.preview,
+                    previewColorIndex: game.previewColorIndex,
                     colors: colors,
                     cell: cell,
                   ),
@@ -79,6 +111,7 @@ class _BoardPainter extends CustomPainter {
   final Puzzle puzzle;
   final List<PlacedRect> placed;
   final GridRect? preview;
+  final int previewColorIndex;
   final AppColors colors;
   final double cell;
 
@@ -86,6 +119,7 @@ class _BoardPainter extends CustomPainter {
     required this.puzzle,
     required this.placed,
     required this.preview,
+    required this.previewColorIndex,
     required this.colors,
     required this.cell,
   });
@@ -128,7 +162,7 @@ class _BoardPainter extends CustomPainter {
       canvas.drawRRect(rrect, border);
     }
 
-    // Drag preview.
+    // Drag preview — same palette color as the committed shape, semi-transparent.
     final pv = preview;
     if (pv != null) {
       final rect = Rect.fromLTWH(
@@ -138,13 +172,13 @@ class _BoardPainter extends CustomPainter {
         pv.height * cell - 2 * margin,
       );
       final rrect = RRect.fromRectAndRadius(rect, radius);
-      final fill = Paint()
-        ..color = colors.cellText.withValues(alpha: colors.isDark ? 0.28 : 0.22);
+      final base = RectPalette.at(previewColorIndex, colors.isDark);
+      final fill = Paint()..color = base.withValues(alpha: 0.55);
       canvas.drawRRect(rrect, fill);
       final border = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = cell * 0.03
-        ..color = colors.cellText.withValues(alpha: 0.5);
+        ..strokeWidth = cell * 0.02
+        ..color = Colors.black.withValues(alpha: 0.18);
       canvas.drawRRect(rrect, border);
     }
 
@@ -182,6 +216,7 @@ class _BoardPainter extends CustomPainter {
   bool shouldRepaint(_BoardPainter old) =>
       old.placed != placed ||
       old.preview != preview ||
+      old.previewColorIndex != previewColorIndex ||
       old.colors.isDark != colors.isDark ||
       old.cell != cell;
 }

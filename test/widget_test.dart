@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shikaku_game/logic/generator.dart';
 import 'package:shikaku_game/logic/validator.dart';
 import 'package:shikaku_game/models/puzzle.dart';
+import 'package:shikaku_game/state/game_controller.dart';
 
 void main() {
   const generator = PuzzleGenerator();
@@ -62,5 +63,35 @@ void main() {
     expect(a.col, 2);
     expect(a.width, 3);
     expect(a.height, 3);
+  });
+
+  test('single-cell tap previews but does not commit', () {
+    final game = GameController(1)..hapticsEnabled = false;
+    game.startDrag(0, 0);
+    expect(game.preview?.area, 1);
+    game.endDrag();
+    expect(game.placed, isEmpty);
+  });
+
+  test('single-cell tap on placed shape removes it', () {
+    final game = GameController(1)..hapticsEnabled = false;
+    game.startDrag(0, 0);
+    game.updateDrag(0, 1);
+    game.endDrag();
+    expect(game.placed.length, 1);
+
+    game.startDrag(0, 0);
+    game.endDrag();
+    expect(game.placed, isEmpty);
+    expect(game.canUndo, isTrue);
+  });
+
+  test('two-cell drag commits a rectangle', () {
+    final game = GameController(1)..hapticsEnabled = false;
+    game.startDrag(0, 0);
+    game.updateDrag(0, 1);
+    game.endDrag();
+    expect(game.placed.length, 1);
+    expect(game.placed.first.rect.area, 2);
   });
 }

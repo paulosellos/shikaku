@@ -32,6 +32,8 @@ class GameController extends ChangeNotifier {
   Puzzle get puzzle => _puzzle;
   List<PlacedRect> get placed => List.unmodifiable(_placed);
   GridRect? get preview => _preview;
+  /// Palette slot for the rectangle currently being drawn (preview).
+  int get previewColorIndex => _colorCounter;
   bool get solved => _solved;
   bool get canUndo => _history.isNotEmpty;
   Duration get elapsed => _stopwatch.elapsed;
@@ -102,16 +104,19 @@ class GameController extends ChangeNotifier {
       return;
     }
 
-    // A tap (1x1) on an existing rectangle removes it instead of drawing.
-    if (rect.area == 1 && startR != null && startC != null) {
-      final existing = _rectAt(startR, startC);
-      if (existing != null) {
-        _pushHistory();
-        _placed.remove(existing);
-        _tick();
-        notifyListeners();
-        return;
+    // Single-cell touch: preview only — never paint. Tap an existing shape to
+    // remove it (same as eraser on that rectangle).
+    if (rect.area < 2) {
+      if (startR != null && startC != null) {
+        final existing = _rectAt(startR, startC);
+        if (existing != null) {
+          _pushHistory();
+          _placed.remove(existing);
+          _tick();
+        }
       }
+      notifyListeners();
+      return;
     }
 
     _commitRect(rect);

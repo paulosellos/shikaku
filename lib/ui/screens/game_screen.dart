@@ -137,8 +137,8 @@ class _GameScreenState extends State<GameScreen> {
           'Divide the whole grid into rectangles. Each rectangle must contain '
           'exactly one number, and that number equals the number of cells in '
           'the rectangle. Rectangles cannot overlap.\n\n'
-          'Drag across cells to draw a rectangle. Tap the eraser, then a '
-          'rectangle, to remove it.',
+          'Drag across at least two cells to draw a rectangle. Tap a placed '
+          'shape to remove it, or use the eraser tool.',
           style: TextStyle(color: colors.headerText, height: 1.4),
         ),
         actions: [
