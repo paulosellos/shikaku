@@ -7,180 +7,158 @@ enum PuzzleDifficulty {
   hard,
 }
 
-/// Metrics produced by [PuzzleSolver.analyze] for a candidate board.
+/// Metrics from logical-only solving (clue single + cell single, no branching).
 @immutable
-class DifficultyAnalysis {
-  final int solutionCount;
+class LogicalSolveAnalysis {
+  final bool solved;
   final int clueCount;
   final int cellCount;
   final double averageInitialCandidates;
   final int maxInitialCandidates;
+  final int minInitialCandidates;
   final int initialForcedClues;
+  final int initialForcedCells;
   final int propagationRounds;
   final int forcedPlacements;
-  final int guesses;
-  final int maxSearchDepth;
-  final int visitedNodes;
-  final int score;
 
-  const DifficultyAnalysis({
-    required this.solutionCount,
+  const LogicalSolveAnalysis({
+    required this.solved,
     required this.clueCount,
     required this.cellCount,
     required this.averageInitialCandidates,
     required this.maxInitialCandidates,
+    required this.minInitialCandidates,
     required this.initialForcedClues,
+    required this.initialForcedCells,
     required this.propagationRounds,
     required this.forcedPlacements,
-    required this.guesses,
-    required this.maxSearchDepth,
-    required this.visitedNodes,
-    required this.score,
   });
+
+  double get clueDensity => cellCount == 0 ? 0 : clueCount / cellCount;
+
+  double get averageRegionArea => clueCount == 0 ? 0 : cellCount / clueCount;
 
   double get initialForcedRatio =>
       clueCount == 0 ? 0 : initialForcedClues / clueCount;
-
-  bool get isUnique => solutionCount == 1;
 }
 
-/// Generation settings and acceptance rules for a difficulty tier.
+/// Combined diagnostics for a generated puzzle (debug / ranking).
+@immutable
+class DifficultyAnalysis {
+  final LogicalSolveAnalysis logical;
+  final int solutionCount;
+  final int uniquenessNodes;
+  final int score;
+  final int targetClueCount;
+
+  const DifficultyAnalysis({
+    required this.logical,
+    required this.solutionCount,
+    required this.uniquenessNodes,
+    required this.score,
+    required this.targetClueCount,
+  });
+
+  bool get isUnique => solutionCount == 1;
+
+  int get clueCount => logical.clueCount;
+
+  int get cellCount => logical.cellCount;
+
+  double get averageInitialCandidates => logical.averageInitialCandidates;
+
+  int get maxInitialCandidates => logical.maxInitialCandidates;
+
+  int get initialForcedClues => logical.initialForcedClues;
+
+  int get initialForcedCells => logical.initialForcedCells;
+
+  int get propagationRounds => logical.propagationRounds;
+
+  double get clueDensity => logical.clueDensity;
+
+  double get averageRegionArea => logical.averageRegionArea;
+
+  double get initialForcedRatio => logical.initialForcedRatio;
+}
+
+/// Soft quality thresholds for ranking candidates within a tier.
 @immutable
 class DifficultyProfile {
   final PuzzleDifficulty difficulty;
-  final int minRows;
-  final int maxRows;
-  final int minCols;
-  final int maxCols;
-  final int minScore;
-  final int maxScore;
-  final int maxSearchDepth;
   final double? minInitialForcedRatio;
+  final double? maxInitialForcedRatio;
+  final double? minAverageInitialCandidates;
   final double? maxAverageInitialCandidates;
-  final int maxVisitedNodes;
-  final double stopProb;
-  final int minMaxArea;
-  final int maxMaxArea;
-  final int maxAttempts;
-  final int searchNodeLimit;
+  final int? minPropagationRounds;
 
   const DifficultyProfile({
     required this.difficulty,
-    required this.minRows,
-    required this.maxRows,
-    required this.minCols,
-    required this.maxCols,
-    required this.minScore,
-    required this.maxScore,
-    required this.maxSearchDepth,
     this.minInitialForcedRatio,
+    this.maxInitialForcedRatio,
+    this.minAverageInitialCandidates,
     this.maxAverageInitialCandidates,
-    required this.maxVisitedNodes,
-    required this.stopProb,
-    required this.minMaxArea,
-    required this.maxMaxArea,
-    required this.maxAttempts,
-    required this.searchNodeLimit,
+    this.minPropagationRounds,
   });
 
-  bool accepts(DifficultyAnalysis analysis) {
-    if (!analysis.isUnique) return false;
-    if (analysis.maxSearchDepth > maxSearchDepth) return false;
-    if (analysis.visitedNodes > maxVisitedNodes) return false;
-    if (analysis.score < minScore || analysis.score > maxScore) return false;
-    if (minInitialForcedRatio != null &&
-        analysis.initialForcedRatio < minInitialForcedRatio!) {
-      return false;
-    }
-    if (maxAverageInitialCandidates != null &&
-        analysis.averageInitialCandidates > maxAverageInitialCandidates!) {
-      return false;
-    }
-    return true;
-  }
-
-  /// How close [analysis] is to this profile (lower is better). Only meaningful
-  /// for unique puzzles.
-  int distanceFrom(DifficultyAnalysis analysis) {
+  /// Lower is better. Only for structurally valid candidates.
+  int softDistanceFrom(LogicalSolveAnalysis logical) {
     var d = 0;
-    if (analysis.score < minScore) {
-      d += (minScore - analysis.score) * 2;
-    } else if (analysis.score > maxScore) {
-      d += (analysis.score - maxScore) * 2;
-    }
-    if (analysis.maxSearchDepth > maxSearchDepth) {
-      d += (analysis.maxSearchDepth - maxSearchDepth) * 15;
-    }
     if (minInitialForcedRatio != null &&
-        analysis.initialForcedRatio < minInitialForcedRatio!) {
-      d += ((minInitialForcedRatio! - analysis.initialForcedRatio) * 100).round();
+        logical.initialForcedRatio < minInitialForcedRatio!) {
+      d += ((minInitialForcedRatio! - logical.initialForcedRatio) * 100).round();
     }
-    if (maxAverageInitialCandidates != null &&
-        analysis.averageInitialCandidates > maxAverageInitialCandidates!) {
-      d += ((analysis.averageInitialCandidates - maxAverageInitialCandidates!) *
+    if (maxInitialForcedRatio != null &&
+        logical.initialForcedRatio > maxInitialForcedRatio!) {
+      d += ((logical.initialForcedRatio - maxInitialForcedRatio!) * 100).round();
+    }
+    if (minAverageInitialCandidates != null &&
+        logical.averageInitialCandidates < minAverageInitialCandidates!) {
+      d += ((minAverageInitialCandidates! - logical.averageInitialCandidates) *
               20)
           .round();
     }
-    if (analysis.visitedNodes > maxVisitedNodes) {
-      d += analysis.visitedNodes - maxVisitedNodes;
+    if (maxAverageInitialCandidates != null &&
+        logical.averageInitialCandidates > maxAverageInitialCandidates!) {
+      d += ((logical.averageInitialCandidates - maxAverageInitialCandidates!) *
+              20)
+          .round();
+    }
+    if (minPropagationRounds != null &&
+        logical.propagationRounds < minPropagationRounds!) {
+      d += (minPropagationRounds! - logical.propagationRounds) * 5;
     }
     return d;
   }
+
+  bool acceptsSoftTargets(LogicalSolveAnalysis logical) =>
+      softDistanceFrom(logical) == 0;
 }
 
-/// Centralized difficulty tuning constants.
+/// Centralized difficulty tuning and structural rules.
 abstract final class DifficultyProfiles {
+  static const maxPartitionAttempts = 80;
+  static const cluePlacementAttempts = 8;
+  static const searchNodeLimit = 5000;
+  static const minRegionArea = 2;
+
   static const easy = DifficultyProfile(
     difficulty: PuzzleDifficulty.easy,
-    minRows: 6,
-    maxRows: 7,
-    minCols: 7,
-    maxCols: 8,
-    minScore: 0,
-    maxScore: 35,
-    maxSearchDepth: 0,
     minInitialForcedRatio: 0.25,
     maxAverageInitialCandidates: 3.0,
-    maxVisitedNodes: 500,
-    stopProb: 0.40,
-    minMaxArea: 10,
-    maxMaxArea: 14,
-    maxAttempts: 200,
-    searchNodeLimit: 5000,
   );
 
   static const medium = DifficultyProfile(
     difficulty: PuzzleDifficulty.medium,
-    minRows: 7,
-    maxRows: 8,
-    minCols: 8,
-    maxCols: 9,
-    minScore: 30,
-    maxScore: 65,
-    maxSearchDepth: 1,
-    maxVisitedNodes: 2000,
-    stopProb: 0.28,
-    minMaxArea: 8,
-    maxMaxArea: 16,
-    maxAttempts: 200,
-    searchNodeLimit: 5000,
+    minInitialForcedRatio: 0.10,
+    maxInitialForcedRatio: 0.35,
   );
 
   static const hard = DifficultyProfile(
     difficulty: PuzzleDifficulty.hard,
-    minRows: 8,
-    maxRows: 9,
-    minCols: 9,
-    maxCols: 11,
-    minScore: 55,
-    maxScore: 100,
-    maxSearchDepth: 3,
-    maxVisitedNodes: 5000,
-    stopProb: 0.18,
-    minMaxArea: 6,
-    maxMaxArea: 12,
-    maxAttempts: 200,
-    searchNodeLimit: 5000,
+    maxInitialForcedRatio: 0.20,
+    minAverageInitialCandidates: 2.5,
+    minPropagationRounds: 2,
   );
 
   static DifficultyProfile forDifficulty(PuzzleDifficulty d) => switch (d) {
@@ -188,6 +166,103 @@ abstract final class DifficultyProfiles {
         PuzzleDifficulty.medium => medium,
         PuzzleDifficulty.hard => hard,
       };
+
+  static int boardSizeFor(PuzzleDifficulty difficulty, int level) {
+    switch (difficulty) {
+      case PuzzleDifficulty.easy:
+        return 6;
+      case PuzzleDifficulty.medium:
+        return 7;
+      case PuzzleDifficulty.hard:
+        return level <= 20 ? 8 : 9;
+    }
+  }
+
+  static int minCluesFor(PuzzleDifficulty difficulty, int level) {
+    switch (difficulty) {
+      case PuzzleDifficulty.easy:
+        return 13;
+      case PuzzleDifficulty.medium:
+        return 12;
+      case PuzzleDifficulty.hard:
+        return level <= 20 ? 10 : 11;
+    }
+  }
+
+  static int maxCluesFor(PuzzleDifficulty difficulty, int level) {
+    switch (difficulty) {
+      case PuzzleDifficulty.easy:
+        return 16;
+      case PuzzleDifficulty.medium:
+        return 15;
+      case PuzzleDifficulty.hard:
+        return level <= 20 ? 13 : 14;
+    }
+  }
+
+  /// Deterministic target region / clue count for [level] within tier range.
+  static int targetClueCountFor(PuzzleDifficulty difficulty, int level) {
+    final min = minCluesFor(difficulty, level);
+    final max = maxCluesFor(difficulty, level);
+    final high = switch (difficulty) {
+      PuzzleDifficulty.easy => 16,
+      PuzzleDifficulty.medium => 15,
+      PuzzleDifficulty.hard => level <= 20 ? 13 : 14,
+    };
+    final low = min;
+    final startLevel = switch (difficulty) {
+      PuzzleDifficulty.easy => 1,
+      PuzzleDifficulty.medium => 1,
+      PuzzleDifficulty.hard => level <= 20 ? 1 : 21,
+    };
+    final endLevel = switch (difficulty) {
+      PuzzleDifficulty.easy => 20,
+      PuzzleDifficulty.medium => 20,
+      PuzzleDifficulty.hard => level <= 20 ? 20 : 40,
+    };
+    return _lerpClue(level, startLevel, endLevel, high, low)
+        .clamp(min, max);
+  }
+
+  static int _lerpClue(
+    int level,
+    int startLevel,
+    int endLevel,
+    int highClues,
+    int lowClues,
+  ) {
+    if (level <= startLevel) return highClues;
+    if (level >= endLevel) return lowClues;
+    final t = (level - startLevel) / (endLevel - startLevel);
+    return (highClues + (lowClues - highClues) * t).round();
+  }
+
+  /// Internal 0–100 score from logical metrics (not tier assignment).
+  static int scoreFrom({
+    required int boardSize,
+    required LogicalSolveAnalysis logical,
+  }) {
+    final sizeComponent = (boardSize / 9).clamp(0.0, 1.0);
+    final densityComponent =
+        (logical.clueDensity / 0.30).clamp(0.0, 1.0); // ~16/36 ≈ 0.44 max
+    final regionComponent =
+        (1.0 - (logical.averageRegionArea / 9)).clamp(0.0, 1.0);
+    final densityBlend = (densityComponent + regionComponent) / 2;
+    final ambiguity =
+        ((logical.averageInitialCandidates - 1) / 5).clamp(0.0, 1.0);
+    final forcedDifficulty =
+        (1.0 - logical.initialForcedRatio).clamp(0.0, 1.0);
+    final chainDifficulty =
+        (logical.propagationRounds / 12).clamp(0.0, 1.0);
+
+    return (25 * sizeComponent +
+            25 * densityBlend +
+            20 * ambiguity +
+            20 * forcedDifficulty +
+            10 * chainDifficulty)
+        .round()
+        .clamp(0, 100);
+  }
 }
 
 extension PuzzleDifficultyUi on PuzzleDifficulty {
@@ -198,8 +273,8 @@ extension PuzzleDifficultyUi on PuzzleDifficulty {
       };
 
   String get description => switch (this) {
-        PuzzleDifficulty.easy => 'Bigger rectangles, gentler logic.',
-        PuzzleDifficulty.medium => 'A balanced challenge.',
-        PuzzleDifficulty.hard => 'Tight grids, sharp thinking.',
+        PuzzleDifficulty.easy => '6×6 with more clues and clearer openings.',
+        PuzzleDifficulty.medium => '7×7 with fewer clues and longer deductions.',
+        PuzzleDifficulty.hard => 'Large grids, fewer clues, deeper logic.',
       };
 }

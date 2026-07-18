@@ -1,5 +1,25 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/puzzle.dart';
 import '../models/puzzle_difficulty.dart';
+
+/// Identifies one enumerated rectangle candidate for a clue.
+@immutable
+class _CandidateRef {
+  final int clueIndex;
+  final int candidateIndex;
+
+  const _CandidateRef(this.clueIndex, this.candidateIndex);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CandidateRef &&
+      other.clueIndex == clueIndex &&
+      other.candidateIndex == candidateIndex;
+
+  @override
+  int get hashCode => Object.hash(clueIndex, candidateIndex);
+}
 
 /// A rectangle that could cover a clue, used only by the logical solver.
 class _Candidate {
@@ -14,20 +34,125 @@ class _Candidate {
   });
 }
 
+/// Result of a bounded uniqueness search.
+@immutable
+class UniquenessResult {
+  final int solutionCount;
+  final int visitedNodes;
+
+  const UniquenessResult({
+    required this.solutionCount,
+    required this.visitedNodes,
+  });
+}
+
 /// Solves and analyzes Shikaku puzzles from clues only (never uses the stored
 /// generator solution).
 class PuzzleSolver {
   const PuzzleSolver();
 
-  int countSolutions(Puzzle puzzle, {int limit = 2, int nodeLimit = 5000}) {
+  int countSolutions(
+    Puzzle puzzle, {
+    int limit = 2,
+    int nodeLimit = 5000,
+  }) =>
+      _countSolutionsInternal(puzzle, limit: limit, nodeLimit: nodeLimit)
+          .solutionCount;
+
+  UniquenessResult uniquenessResult(
+    Puzzle puzzle, {
+    int limit = 2,
+    int nodeLimit = 5000,
+  }) =>
+      _countSolutionsInternal(puzzle, limit: limit, nodeLimit: nodeLimit);
+
+  /// Propagates clue-single and cell-single rules until stuck. Never branches.
+  LogicalSolveAnalysis analyzeLogically(Puzzle puzzle) {
     final candidates = _enumerateCandidates(puzzle);
-    if (candidates.any((c) => c.isEmpty)) return 0;
+    final clueCount = puzzle.clues.length;
+    final cellCount = puzzle.cellCount;
+
+    if (candidates.any((c) => c.isEmpty)) {
+      return _emptyLogical(clueCount, cellCount);
+    }
+
+    final initialCounts = candidates.map((c) => c.length).toList();
+    final avgCandidates = initialCounts.reduce((a, b) => a + b) / clueCount;
+    final maxCandidates = initialCounts.reduce((a, b) => a > b ? a : b);
+    final minCandidates = initialCounts.reduce((a, b) => a < b ? a : b);
+
+    final remaining = List.generate(
+      clueCount,
+      (i) => Set<int>.from(List.generate(candidates[i].length, (j) => j)),
+    );
+    final selected = <int, int>{};
+    final covered = <int>{};
+    final propagationRounds = _Counter();
+    final forcedPlacements = _Counter();
+
+    final initialForcedClues = _countInitialForcedClues(candidates);
+    final initialForcedCells = _countInitialForcedCells(candidates, cellCount);
+
+    final ok = _propagate(
+      puzzle,
+      candidates,
+      remaining,
+      selected,
+      covered,
+      propagationRounds,
+      forcedPlacements,
+    );
+
+    final solved = ok &&
+        selected.length == clueCount &&
+        covered.length == cellCount;
+
+    return LogicalSolveAnalysis(
+      solved: solved,
+      clueCount: clueCount,
+      cellCount: cellCount,
+      averageInitialCandidates: avgCandidates,
+      maxInitialCandidates: maxCandidates,
+      minInitialCandidates: minCandidates,
+      initialForcedClues: initialForcedClues,
+      initialForcedCells: initialForcedCells,
+      propagationRounds: propagationRounds.value,
+      forcedPlacements: forcedPlacements.value,
+    );
+  }
+
+  /// Legacy combined API — prefer [analyzeLogically] + [countSolutions].
+  DifficultyAnalysis analyze(Puzzle puzzle, {int nodeLimit = 5000}) {
+    final logical = analyzeLogically(puzzle);
+    final uniqueness = uniquenessResult(puzzle, nodeLimit: nodeLimit);
+    return DifficultyAnalysis(
+      logical: logical,
+      solutionCount: uniqueness.solutionCount.clamp(0, 2),
+      uniquenessNodes: uniqueness.visitedNodes,
+      score: DifficultyProfiles.scoreFrom(
+        boardSize: puzzle.rows,
+        logical: logical,
+      ),
+      targetClueCount: puzzle.clues.length,
+    );
+  }
+
+  UniquenessResult _countSolutionsInternal(
+    Puzzle puzzle, {
+    required int limit,
+    required int nodeLimit,
+  }) {
+    final candidates = _enumerateCandidates(puzzle);
+    if (candidates.any((c) => c.isEmpty)) {
+      return const UniquenessResult(solutionCount: 0, visitedNodes: 0);
+    }
 
     final remaining = List.generate(
       puzzle.clues.length,
       (i) => Set<int>.from(List.generate(candidates[i].length, (j) => j)),
     );
     var count = 0;
+    final visitedNodes = _Counter();
     _search(
       puzzle,
       candidates,
@@ -38,81 +163,17 @@ class PuzzleSolver {
       limit: limit,
       nodeLimit: nodeLimit,
       onSolution: () => count++,
-      visitedNodes: _Counter(),
-      maxDepth: _Counter(),
+      visitedNodes: visitedNodes,
       guesses: _Counter(),
       getSolutionCount: () => count,
     );
-    return count;
-  }
-
-  DifficultyAnalysis analyze(Puzzle puzzle, {int nodeLimit = 5000}) {
-    final candidates = _enumerateCandidates(puzzle);
-    final clueCount = puzzle.clues.length;
-    final cellCount = puzzle.cellCount;
-
-    if (candidates.any((c) => c.isEmpty)) {
-      return _emptyAnalysis(clueCount, cellCount, solutionCount: 0);
-    }
-
-    final initialCounts = candidates.map((c) => c.length).toList();
-    final avgCandidates = initialCounts.isEmpty
-        ? 0.0
-        : initialCounts.reduce((a, b) => a + b) / initialCounts.length;
-    final maxCandidates =
-        initialCounts.isEmpty ? 0 : initialCounts.reduce((a, b) => a > b ? a : b);
-
-    final initialForced = _countInitialForced(candidates, puzzle.cellCount);
-
-    final propagationRounds = _Counter();
-    final forcedPlacements = _Counter();
-    final guesses = _Counter();
-    final maxDepth = _Counter();
-    final visitedNodes = _Counter();
-    var solutionCount = 0;
-
-    _search(
-      puzzle,
-      candidates,
-      List.generate(
-        clueCount,
-        (i) => Set<int>.from(List.generate(candidates[i].length, (j) => j)),
-      ),
-      {},
-      {},
-      0,
-      limit: 2,
-      nodeLimit: nodeLimit,
-      onSolution: () => solutionCount++,
-      visitedNodes: visitedNodes,
-      maxDepth: maxDepth,
-      guesses: guesses,
-      propagationRounds: propagationRounds,
-      forcedPlacements: forcedPlacements,
-      getSolutionCount: () => solutionCount,
-    );
-
-    return _analysisFrom(
-      solutionCount: solutionCount,
-      clueCount: clueCount,
-      cellCount: cellCount,
-      avgCandidates: avgCandidates,
-      maxCandidates: maxCandidates,
-      initialForced: initialForced,
-      propagationRounds: propagationRounds.value,
-      forcedPlacements: forcedPlacements.value,
-      guesses: guesses.value,
-      maxDepth: maxDepth.value,
+    return UniquenessResult(
+      solutionCount: count.clamp(0, 2),
       visitedNodes: visitedNodes.value,
     );
   }
 
   List<List<_Candidate>> _enumerateCandidates(Puzzle puzzle) {
-    final clueCells = <(int, int)>[];
-    for (var i = 0; i < puzzle.clues.length; i++) {
-      clueCells.add((puzzle.clues[i].row, puzzle.clues[i].col));
-    }
-
     final result = <List<_Candidate>>[];
     for (var i = 0; i < puzzle.clues.length; i++) {
       final clue = puzzle.clues[i];
@@ -167,24 +228,60 @@ class PuzzleSolver {
     return result;
   }
 
-  int _countInitialForced(List<List<_Candidate>> candidates, int cellCount) {
+  int _countInitialForcedClues(List<List<_Candidate>> candidates) {
     var forced = 0;
-    for (var i = 0; i < candidates.length; i++) {
-      if (candidates[i].length == 1) forced++;
+    for (final list in candidates) {
+      if (list.length == 1) forced++;
     }
+    return forced;
+  }
+
+  int _countInitialForcedCells(
+    List<List<_Candidate>> candidates,
+    int cellCount,
+  ) {
+    var forced = 0;
     for (var cell = 0; cell < cellCount; cell++) {
-      final owners = <int>{};
-      for (var i = 0; i < candidates.length; i++) {
-        for (final cand in candidates[i]) {
-          if (cand.cellIndices.contains(cell)) owners.add(i);
-        }
-      }
-      if (owners.length == 1) {
-        final only = owners.first;
-        if (candidates[only].length > 1) forced++;
+      if (_candidateRefsForCell(candidates, cell, const {}).length == 1) {
+        forced++;
       }
     }
     return forced;
+  }
+
+  Set<_CandidateRef> _candidateRefsForCell(
+    List<List<_Candidate>> allCandidates,
+    int cell,
+    Set<int> selectedClues,
+  ) {
+    final refs = <_CandidateRef>{};
+    for (var clue = 0; clue < allCandidates.length; clue++) {
+      if (selectedClues.contains(clue)) continue;
+      for (var ci = 0; ci < allCandidates[clue].length; ci++) {
+        if (allCandidates[clue][ci].cellIndices.contains(cell)) {
+          refs.add(_CandidateRef(clue, ci));
+        }
+      }
+    }
+    return refs;
+  }
+
+  Set<_CandidateRef> _activeCandidateRefsForCell(
+    List<List<_Candidate>> allCandidates,
+    List<Set<int>> remaining,
+    Map<int, int> selected,
+    int cell,
+  ) {
+    final refs = <_CandidateRef>{};
+    for (var clue = 0; clue < remaining.length; clue++) {
+      if (selected.containsKey(clue)) continue;
+      for (final ci in remaining[clue]) {
+        if (allCandidates[clue][ci].cellIndices.contains(cell)) {
+          refs.add(_CandidateRef(clue, ci));
+        }
+      }
+    }
+    return refs;
   }
 
   bool _propagate(
@@ -223,25 +320,22 @@ class PuzzleSolver {
 
       for (var cell = 0; cell < puzzle.cellCount; cell++) {
         if (covered.contains(cell)) continue;
-        final options = <int, int>{};
-        for (var clue = 0; clue < remaining.length; clue++) {
-          if (selected.containsKey(clue)) continue;
-          for (final candIdx in remaining[clue]) {
-            if (allCandidates[clue][candIdx].cellIndices.contains(cell)) {
-              options[clue] = candIdx;
-            }
-          }
-        }
-        if (options.isEmpty) return false;
-        if (options.length == 1) {
-          final entry = options.entries.first;
+        final refs = _activeCandidateRefsForCell(
+          allCandidates,
+          remaining,
+          selected,
+          cell,
+        );
+        if (refs.isEmpty) return false;
+        if (refs.length == 1) {
+          final ref = refs.first;
           if (!_selectCandidate(
             allCandidates,
             remaining,
             selected,
             covered,
-            entry.key,
-            entry.value,
+            ref.clueIndex,
+            ref.candidateIndex,
           )) {
             return false;
           }
@@ -275,8 +369,7 @@ class PuzzleSolver {
       if (other == clue) continue;
       remaining[other].removeWhere((ci) {
         final otherCand = allCandidates[other][ci];
-        if (otherCand.cellIndices.any(covered.contains)) return true;
-        return false;
+        return otherCand.cellIndices.any(covered.contains);
       });
       if (remaining[other].isEmpty && !selected.containsKey(other)) {
         return false;
@@ -293,20 +386,16 @@ class PuzzleSolver {
     Set<int> covered,
     int depth, {
     required int limit,
-    int nodeLimit = 5000,
+    required int nodeLimit,
     required void Function() onSolution,
     required _Counter visitedNodes,
-    required _Counter maxDepth,
     required _Counter guesses,
-    _Counter? propagationRounds,
-    _Counter? forcedPlacements,
     required int Function() getSolutionCount,
   }) {
     if (getSolutionCount() >= limit) return;
 
     visitedNodes.value++;
     if (visitedNodes.value > nodeLimit) return;
-    if (depth > maxDepth.value) maxDepth.value = depth;
 
     final remCopy = remaining.map(Set<int>.from).toList();
     final selCopy = Map<int, int>.from(selected);
@@ -326,15 +415,12 @@ class PuzzleSolver {
       return;
     }
 
-    propagationRounds?.value += propRounds.value;
-    forcedPlacements?.value += forced.value;
-
-    if (selCopy.length == puzzle.clues.length && covCopy.length == puzzle.cellCount) {
+    if (selCopy.length == puzzle.clues.length &&
+        covCopy.length == puzzle.cellCount) {
       onSolution();
       return;
     }
 
-    // Pick unresolved clue with fewest remaining candidates (>1).
     var bestClue = -1;
     var bestCount = 999;
     for (var i = 0; i < remCopy.length; i++) {
@@ -346,160 +432,97 @@ class PuzzleSolver {
       }
     }
 
-    if (bestClue == -1) {
-      // Try cell-based branching if no clue with >1 option.
-      for (var cell = 0; cell < puzzle.cellCount; cell++) {
-        if (covCopy.contains(cell)) continue;
-        final options = <int, int>{};
-        for (var clue = 0; clue < remCopy.length; clue++) {
-          if (selCopy.containsKey(clue)) continue;
-          for (final candIdx in remCopy[clue]) {
-            if (allCandidates[clue][candIdx].cellIndices.contains(cell)) {
-              options[clue] = candIdx;
-            }
-          }
-        }
-        if (options.length > 1) {
-          for (final entry in options.entries) {
-            guesses.value++;
-            final nextRem = remCopy.map(Set<int>.from).toList();
-            final nextSel = Map<int, int>.from(selCopy);
-            final nextCov = Set<int>.from(covCopy);
-            if (_selectCandidate(
-              allCandidates,
-              nextRem,
-              nextSel,
-              nextCov,
-              entry.key,
-              entry.value,
-            )) {
-              _search(
-                puzzle,
-                allCandidates,
-                nextRem,
-                nextSel,
-                nextCov,
-                depth + 1,
-                limit: limit,
-                nodeLimit: nodeLimit,
-                onSolution: onSolution,
-                visitedNodes: visitedNodes,
-                maxDepth: maxDepth,
-                guesses: guesses,
-                propagationRounds: propagationRounds,
-                forcedPlacements: forcedPlacements,
-                getSolutionCount: getSolutionCount,
-              );
-            }
-          }
-          return;
+    if (bestClue != -1) {
+      final options = List<int>.from(remCopy[bestClue]);
+      for (final candIdx in options) {
+        if (getSolutionCount() >= limit) return;
+        guesses.value++;
+        final nextRem = remCopy.map(Set<int>.from).toList();
+        final nextSel = Map<int, int>.from(selCopy);
+        final nextCov = Set<int>.from(covCopy);
+        if (_selectCandidate(
+          allCandidates,
+          nextRem,
+          nextSel,
+          nextCov,
+          bestClue,
+          candIdx,
+        )) {
+          _search(
+            puzzle,
+            allCandidates,
+            nextRem,
+            nextSel,
+            nextCov,
+            depth + 1,
+            limit: limit,
+            nodeLimit: nodeLimit,
+            onSolution: onSolution,
+            visitedNodes: visitedNodes,
+            guesses: guesses,
+            getSolutionCount: getSolutionCount,
+          );
         }
       }
       return;
     }
 
-    final options = List<int>.from(remCopy[bestClue]);
-    for (final candIdx in options) {
-      if (getSolutionCount() >= limit) return;
-      guesses.value++;
-      final nextRem = remCopy.map(Set<int>.from).toList();
-      final nextSel = Map<int, int>.from(selCopy);
-      final nextCov = Set<int>.from(covCopy);
-      if (_selectCandidate(
+    for (var cell = 0; cell < puzzle.cellCount; cell++) {
+      if (covCopy.contains(cell)) continue;
+      final refs = _activeCandidateRefsForCell(
         allCandidates,
-        nextRem,
-        nextSel,
-        nextCov,
-        bestClue,
-        candIdx,
-      )) {
-        _search(
-          puzzle,
-          allCandidates,
-          nextRem,
-          nextSel,
-          nextCov,
-          depth + 1,
-          limit: limit,
-          nodeLimit: nodeLimit,
-          onSolution: onSolution,
-          visitedNodes: visitedNodes,
-          maxDepth: maxDepth,
-          guesses: guesses,
-          propagationRounds: propagationRounds,
-          forcedPlacements: forcedPlacements,
-          getSolutionCount: getSolutionCount,
-        );
+        remCopy,
+        selCopy,
+        cell,
+      );
+      if (refs.length > 1) {
+        for (final ref in refs) {
+          if (getSolutionCount() >= limit) return;
+          guesses.value++;
+          final nextRem = remCopy.map(Set<int>.from).toList();
+          final nextSel = Map<int, int>.from(selCopy);
+          final nextCov = Set<int>.from(covCopy);
+          if (_selectCandidate(
+            allCandidates,
+            nextRem,
+            nextSel,
+            nextCov,
+            ref.clueIndex,
+            ref.candidateIndex,
+          )) {
+            _search(
+              puzzle,
+              allCandidates,
+              nextRem,
+              nextSel,
+              nextCov,
+              depth + 1,
+              limit: limit,
+              nodeLimit: nodeLimit,
+              onSolution: onSolution,
+              visitedNodes: visitedNodes,
+              guesses: guesses,
+              getSolutionCount: getSolutionCount,
+            );
+          }
+        }
+        return;
       }
     }
   }
 
-  DifficultyAnalysis _analysisFrom({
-    required int solutionCount,
-    required int clueCount,
-    required int cellCount,
-    required double avgCandidates,
-    required int maxCandidates,
-    required int initialForced,
-    required int propagationRounds,
-    required int forcedPlacements,
-    required int guesses,
-    required int maxDepth,
-    required int visitedNodes,
-  }) {
-    final forcedRatio = clueCount == 0 ? 0.0 : initialForced / clueCount;
-    final ambiguity = ((avgCandidates - 1) / 5).clamp(0.0, 1.0);
-    final forcedDifficulty = (1.0 - forcedRatio).clamp(0.0, 1.0);
-    final chainDifficulty = (propagationRounds / 10).clamp(0.0, 1.0);
-    final searchDifficulty = (maxDepth / 3).clamp(0.0, 1.0);
-    final nodeDifficulty =
-        (visitedNodes <= 0 ? 0.0 : (visitedNodes / 5000).clamp(0.0, 1.0));
-    final sizeDifficulty =
-        (cellCount / 100).clamp(0.0, 1.0); // ~9x11 = 99 cells
-
-    final score = (25 * ambiguity +
-            20 * forcedDifficulty +
-            15 * chainDifficulty +
-            25 * searchDifficulty +
-            10 * nodeDifficulty +
-            5 * sizeDifficulty)
-        .round()
-        .clamp(0, 100);
-
-    return DifficultyAnalysis(
-      solutionCount: solutionCount.clamp(0, 2),
-      clueCount: clueCount,
-      cellCount: cellCount,
-      averageInitialCandidates: avgCandidates,
-      maxInitialCandidates: maxCandidates,
-      initialForcedClues: initialForced,
-      propagationRounds: propagationRounds,
-      forcedPlacements: forcedPlacements,
-      guesses: guesses,
-      maxSearchDepth: maxDepth,
-      visitedNodes: visitedNodes,
-      score: score,
-    );
-  }
-
-  DifficultyAnalysis _emptyAnalysis(
-    int clueCount,
-    int cellCount, {
-    required int solutionCount,
-  }) =>
-      DifficultyAnalysis(
-        solutionCount: solutionCount,
+  LogicalSolveAnalysis _emptyLogical(int clueCount, int cellCount) =>
+      LogicalSolveAnalysis(
+        solved: false,
         clueCount: clueCount,
         cellCount: cellCount,
         averageInitialCandidates: 0,
         maxInitialCandidates: 0,
+        minInitialCandidates: 0,
         initialForcedClues: 0,
+        initialForcedCells: 0,
         propagationRounds: 0,
         forcedPlacements: 0,
-        guesses: 0,
-        maxSearchDepth: 0,
-        visitedNodes: 0,
-        score: 100,
       );
 }
 
