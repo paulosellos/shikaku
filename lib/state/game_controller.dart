@@ -7,7 +7,7 @@ import '../models/puzzle_difficulty.dart';
 import '../models/puzzle.dart';
 
 /// Holds the live state of one puzzle: placed rectangles, the current drag
-/// preview, undo history, and remaining hint/wand charges.
+/// preview, undo history, tool charges, and per-level usage stats.
 class GameController extends ChangeNotifier {
   final PuzzleGenerator _generator = const PuzzleGenerator();
   final ShikakuValidator _validator = const ShikakuValidator();
@@ -15,6 +15,7 @@ class GameController extends ChangeNotifier {
   bool hapticsEnabled = true;
 
   PuzzleDifficulty difficulty;
+  final int? _generationSeed;
   late Puzzle _puzzle;
   final List<PlacedRect> _placed = [];
   final List<List<PlacedRect>> _history = [];
@@ -29,6 +30,17 @@ class GameController extends ChangeNotifier {
   bool _solved = false;
   final Stopwatch _stopwatch = Stopwatch();
 
+  /// Semi-transparent outline of the hinted rectangle (not placed).
+  GridRect? hintPreviewRect;
+  int? hintedClueIndex;
+
+  /// Clue the player last touched — wand and hint prefer this region.
+  int? lastInteractedClueIndex;
+
+  int hintsUsed = 0;
+  int wandUsed = 0;
+  int undoCount = 0;
+
   Puzzle get puzzle => _puzzle;
   List<PlacedRect> get placed => List.unmodifiable(_placed);
   GridRect? get preview => _preview;
@@ -38,7 +50,11 @@ class GameController extends ChangeNotifier {
   bool get canUndo => _history.isNotEmpty;
   Duration get elapsed => _stopwatch.elapsed;
 
-  GameController(int level, {this.difficulty = PuzzleDifficulty.medium}) {
+  GameController(
+    int level, {
+    this.difficulty = PuzzleDifficulty.medium,
+    int? seed,
+  }) : _generationSeed = seed {
     _load(level);
   }
 
@@ -49,7 +65,11 @@ class GameController extends ChangeNotifier {
   }
 
   void _load(int level) {
-    _puzzle = _generator.generate(level, difficulty: difficulty);
+    _puzzle = _generator.generate(
+      level,
+      difficulty: difficulty,
+      seed: _generationSeed,
+    );
     _placed.clear();
     _history.clear();
     _preview = null;
@@ -59,6 +79,11 @@ class GameController extends ChangeNotifier {
     hintsLeft = 6;
     wandsLeft = 1;
     _solved = false;
+    _clearHintPreview();
+    lastInteractedClueIndex = null;
+    hintsUsed = 0;
+    wandUsed = 0;
+    undoCount = 0;
     _stopwatch
       ..reset()
       ..start();
@@ -73,6 +98,7 @@ class GameController extends ChangeNotifier {
 
   void startDrag(int row, int col) {
     if (_solved) return;
+    _noteClueInteraction(row, col);
     _dragStartRow = row;
     _dragStartCol = col;
     _preview = GridRect.fromCorners(row, col, row, col);
@@ -108,6 +134,7 @@ class GameController extends ChangeNotifier {
     // remove it (same as eraser on that rectangle).
     if (rect.area < 2) {
       if (startR != null && startC != null) {
+        _noteClueInteraction(startR, startC);
         final existing = _rectAt(startR, startC);
         if (existing != null) {
           _pushHistory();
@@ -127,6 +154,9 @@ class GameController extends ChangeNotifier {
     _pushHistory();
     _placed.removeWhere((p) => p.rect.intersects(rect));
     _placed.add(PlacedRect(rect, _colorCounter++));
+    if (hintPreviewRect != null && hintPreviewRect == rect) {
+      _clearHintPreview();
+    }
     _checkSolved();
   }
 
@@ -147,38 +177,48 @@ class GameController extends ChangeNotifier {
       ..clear()
       ..addAll(_history.removeLast());
     _solved = false;
+    undoCount++;
     _tick();
     notifyListeners();
   }
 
-  /// Reveals one correct rectangle from the solution that isn't placed yet.
+  /// Shows a ghost outline for one unsolved region without placing it.
   void useHint() {
     if (hintsLeft <= 0 || _solved) return;
-    for (final sol in _puzzle.solution) {
-      final already = _placed.any((p) => p.rect == sol);
-      if (already) continue;
-      _pushHistory();
-      _placed.removeWhere((p) => p.rect.intersects(sol));
-      _placed.add(PlacedRect(sol, _colorCounter++));
-      hintsLeft--;
-      _tick();
-      _checkSolved();
-      notifyListeners();
-      return;
-    }
+    final target = _pickTargetRegion();
+    if (target == null) return;
+
+    hintPreviewRect = target.$2;
+    hintedClueIndex = target.$1;
+    hintsLeft--;
+    hintsUsed++;
+    _tick();
+    notifyListeners();
   }
 
-  /// Auto-completes the whole puzzle from the stored solution.
+  /// Auto-places exactly one unsolved rectangle from the solution.
   void useWand() {
     if (wandsLeft <= 0 || _solved) return;
+    final target = _pickTargetRegion();
+    if (target == null) return;
+
+    final sol = target.$2;
     _pushHistory();
-    _placed.clear();
-    for (final sol in _puzzle.solution) {
-      _placed.add(PlacedRect(sol, _colorCounter++));
+    _placed.removeWhere((p) => p.rect.intersects(sol));
+    _placed.add(PlacedRect(sol, _colorCounter++));
+    if (hintPreviewRect != null && hintPreviewRect == sol) {
+      _clearHintPreview();
     }
     wandsLeft--;
+    wandUsed++;
     _tick();
     _checkSolved();
+    notifyListeners();
+  }
+
+  void clearHintPreview() {
+    if (hintPreviewRect == null && hintedClueIndex == null) return;
+    _clearHintPreview();
     notifyListeners();
   }
 
@@ -194,6 +234,47 @@ class GameController extends ChangeNotifier {
   PlacedRect? rectAt(int row, int col) => _rectAt(row, col);
 
   ValidationResult evaluate() => _validator.evaluate(_puzzle, _placed);
+
+  List<(int clueIndex, GridRect rect)> _unsolvedRegions() {
+    final regions = <(int, GridRect)>[];
+    for (var i = 0; i < _puzzle.solution.length; i++) {
+      final sol = _puzzle.solution[i];
+      final placed = _placed.any((p) => p.rect == sol);
+      if (!placed) regions.add((i, sol));
+    }
+    return regions;
+  }
+
+  /// Prefers [lastInteractedClueIndex] when still unsolved, else smallest area.
+  (int clueIndex, GridRect rect)? _pickTargetRegion() {
+    final unsolved = _unsolvedRegions();
+    if (unsolved.isEmpty) return null;
+
+    final last = lastInteractedClueIndex;
+    if (last != null) {
+      for (final region in unsolved) {
+        if (region.$1 == last) return region;
+      }
+    }
+
+    unsolved.sort((a, b) => a.$2.area.compareTo(b.$2.area));
+    return unsolved.first;
+  }
+
+  void _noteClueInteraction(int row, int col) {
+    for (var i = 0; i < _puzzle.clues.length; i++) {
+      final clue = _puzzle.clues[i];
+      if (clue.row == row && clue.col == col) {
+        lastInteractedClueIndex = i;
+        return;
+      }
+    }
+  }
+
+  void _clearHintPreview() {
+    hintPreviewRect = null;
+    hintedClueIndex = null;
+  }
 
   void _checkSolved() {
     final result = _validator.evaluate(_puzzle, _placed);

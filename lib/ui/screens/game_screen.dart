@@ -115,7 +115,7 @@ class _GameScreenState extends State<GameScreen> {
                     onEraseToggle: () =>
                         setState(() => _eraseMode = !_eraseMode),
                     onUndo: game.undo,
-                    onWand: game.useWand,
+                    onWand: () => _confirmWand(context, game, colors),
                     onHint: game.useHint,
                   ),
                 ),
@@ -125,6 +125,39 @@ class _GameScreenState extends State<GameScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmWand(
+    BuildContext context,
+    GameController game,
+    AppColors colors,
+  ) async {
+    if (game.wandsLeft <= 0 || game.solved) return;
+    final use = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: colors.background,
+        title: Text('Use magic wand?', style: AppTheme.title(colors)),
+        content: Text(
+          'This will place one correct rectangle for you. You only have '
+          '${game.wandsLeft} charge${game.wandsLeft == 1 ? '' : 's'} left.',
+          style: TextStyle(color: colors.headerText, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel', style: TextStyle(color: colors.subtleText)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Use wand', style: TextStyle(color: colors.accent)),
+          ),
+        ],
+      ),
+    );
+    if (use == true && context.mounted) {
+      game.useWand();
+    }
   }
 
   void _showHelp(BuildContext context, AppColors colors) {
@@ -137,8 +170,10 @@ class _GameScreenState extends State<GameScreen> {
           'Divide the whole grid into rectangles. Each rectangle must contain '
           'exactly one number, and that number equals the number of cells in '
           'the rectangle. Rectangles cannot overlap.\n\n'
-          'Drag across at least two cells to draw a rectangle. Tap a placed '
-          'shape to remove it, or use the eraser tool.',
+          'Drag across at least two cells to draw a rectangle. Tap or long-press '
+          'a placed shape to remove it, or toggle the eraser tool.\n\n'
+          'Hints show a ghost outline without placing it. The magic wand '
+          'places one correct rectangle.',
           style: TextStyle(color: colors.headerText, height: 1.4),
         ),
         actions: [

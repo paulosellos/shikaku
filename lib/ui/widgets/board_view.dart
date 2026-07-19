@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/puzzle.dart';
@@ -24,9 +26,20 @@ class _BoardViewState extends State<BoardView> {
   // the player touched. We lock the preview to the starting cell until the
   // finger moves past this threshold, then treat it as a genuine drag.
   static const double _dragDeadZone = 10;
+  static const Duration _longPressDuration = Duration(milliseconds: 500);
 
   Offset? _downPosition;
   bool _dragExpanded = false;
+  Timer? _longPressTimer;
+  bool _longPressHandled = false;
+  int? _pressRow;
+  int? _pressCol;
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +60,11 @@ class _BoardViewState extends State<BoardView> {
             int colFor(double x) =>
                 (x / cell).floor().clamp(0, puzzle.cols - 1);
 
+            void cancelLongPress() {
+              _longPressTimer?.cancel();
+              _longPressTimer = null;
+            }
+
             return SizedBox(
               width: constraints.maxWidth,
               height: height,
@@ -54,13 +72,32 @@ class _BoardViewState extends State<BoardView> {
                 onPointerDown: (e) {
                   final r = rowFor(e.localPosition.dy);
                   final c = colFor(e.localPosition.dx);
+                  _longPressHandled = false;
+                  _pressRow = r;
+                  _pressCol = c;
+
                   if (eraseMode) {
                     game.eraseAt(r, c);
-                  } else {
-                    _downPosition = e.localPosition;
-                    _dragExpanded = false;
-                    game.startDrag(r, c);
+                    return;
                   }
+
+                  _downPosition = e.localPosition;
+                  _dragExpanded = false;
+                  game.startDrag(r, c);
+
+                  cancelLongPress();
+                  _longPressTimer = Timer(_longPressDuration, () {
+                    if (!mounted || _pressRow == null || _pressCol == null) {
+                      return;
+                    }
+                    if (game.rectAt(_pressRow!, _pressCol!) != null) {
+                      game.eraseAt(_pressRow!, _pressCol!);
+                      _longPressHandled = true;
+                      _downPosition = null;
+                      _dragExpanded = false;
+                      game.endDrag();
+                    }
+                  });
                 },
                 onPointerMove: (e) {
                   if (eraseMode) return;
@@ -69,6 +106,7 @@ class _BoardViewState extends State<BoardView> {
                   if (!_dragExpanded) {
                     final moved = (e.localPosition - down).distance;
                     if (moved < _dragDeadZone) return;
+                    cancelLongPress();
                     _dragExpanded = true;
                   }
                   game.updateDrag(
@@ -77,12 +115,30 @@ class _BoardViewState extends State<BoardView> {
                   );
                 },
                 onPointerUp: (e) {
+                  cancelLongPress();
+                  _pressRow = null;
+                  _pressCol = null;
+                  if (_longPressHandled) {
+                    _longPressHandled = false;
+                    _downPosition = null;
+                    _dragExpanded = false;
+                    return;
+                  }
                   _downPosition = null;
                   _dragExpanded = false;
                   if (eraseMode) return;
                   game.endDrag();
                 },
                 onPointerCancel: (e) {
+                  cancelLongPress();
+                  _pressRow = null;
+                  _pressCol = null;
+                  if (_longPressHandled) {
+                    _longPressHandled = false;
+                    _downPosition = null;
+                    _dragExpanded = false;
+                    return;
+                  }
                   _downPosition = null;
                   _dragExpanded = false;
                   if (eraseMode) return;
@@ -94,6 +150,8 @@ class _BoardViewState extends State<BoardView> {
                     placed: game.placed,
                     preview: game.preview,
                     previewColorIndex: game.previewColorIndex,
+                    hintPreview: game.hintPreviewRect,
+                    hintedClueIndex: game.hintedClueIndex,
                     colors: colors,
                     cell: cell,
                   ),
@@ -112,6 +170,8 @@ class _BoardPainter extends CustomPainter {
   final List<PlacedRect> placed;
   final GridRect? preview;
   final int previewColorIndex;
+  final GridRect? hintPreview;
+  final int? hintedClueIndex;
   final AppColors colors;
   final double cell;
 
@@ -120,6 +180,8 @@ class _BoardPainter extends CustomPainter {
     required this.placed,
     required this.preview,
     required this.previewColorIndex,
+    required this.hintPreview,
+    required this.hintedClueIndex,
     required this.colors,
     required this.cell,
   });
@@ -162,6 +224,30 @@ class _BoardPainter extends CustomPainter {
       canvas.drawRRect(rrect, border);
     }
 
+    // Ghost hint — semi-transparent fill + dashed accent border.
+    final hint = hintPreview;
+    if (hint != null) {
+      final rect = Rect.fromLTWH(
+        hint.col * cell + margin,
+        hint.row * cell + margin,
+        hint.width * cell - 2 * margin,
+        hint.height * cell - 2 * margin,
+      );
+      final rrect = RRect.fromRectAndRadius(rect, radius);
+      final fill = Paint()..color = colors.accent.withValues(alpha: 0.18);
+      canvas.drawRRect(rrect, fill);
+      _drawDashedRRect(
+        canvas,
+        rrect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cell * 0.035
+          ..color = colors.accent.withValues(alpha: 0.85),
+        dash: cell * 0.12,
+        gap: cell * 0.08,
+      );
+    }
+
     // Drag preview — same palette color as the committed shape, semi-transparent.
     final pv = preview;
     if (pv != null) {
@@ -183,7 +269,8 @@ class _BoardPainter extends CustomPainter {
     }
 
     // Clue numbers always stay in their original cell.
-    for (final clue in puzzle.clues) {
+    for (var i = 0; i < puzzle.clues.length; i++) {
+      final clue = puzzle.clues[i];
       final center = Offset(
         clue.col * cell + cell / 2,
         clue.row * cell + cell / 2,
@@ -191,8 +278,36 @@ class _BoardPainter extends CustomPainter {
       final owners = placed
           .where((p) => p.rect.containsCell(clue.row, clue.col))
           .length;
-      final color = owners == 1 ? colors.rectText : colors.cellText;
+      final isHinted = hintedClueIndex == i;
+      final color = isHinted
+          ? colors.accent
+          : (owners == 1 ? colors.rectText : colors.cellText);
+      if (isHinted) {
+        final ring = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cell * 0.04
+          ..color = colors.accent.withValues(alpha: 0.7);
+        canvas.drawCircle(center, cell * 0.28, ring);
+      }
       _drawNumber(canvas, clue.value, center, color);
+    }
+  }
+
+  void _drawDashedRRect(
+    Canvas canvas,
+    RRect rrect,
+    Paint paint, {
+    required double dash,
+    required double gap,
+  }) {
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = (distance + dash).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance += dash + gap;
+      }
     }
   }
 
@@ -217,6 +332,8 @@ class _BoardPainter extends CustomPainter {
       old.placed != placed ||
       old.preview != preview ||
       old.previewColorIndex != previewColorIndex ||
+      old.hintPreview != hintPreview ||
+      old.hintedClueIndex != hintedClueIndex ||
       old.colors.isDark != colors.isDark ||
       old.cell != cell;
 }

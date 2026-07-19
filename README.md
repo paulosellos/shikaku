@@ -28,7 +28,7 @@ Shikaku is a logic puzzle. Your job: **tile the whole grid with rectangles**.
 ## Features
 
 - **Drag-to-draw** rectangles with a live preview while you drag
-- **Eraser**, **undo**, **hints** (6 charges), and a **magic wand** (1 charge) for when logic needs a nudge
+- **Eraser**, **undo**, **hints** (6 charges — ghost outline only), and a **magic wand** (1 charge — places one rectangle)
 - **Procedural puzzles** that scale with level — grid size grows as you progress
 - **Dark / Light / System** themes with optional haptic feedback
 - **Settings sheet** — timer, size counter, reset level

@@ -97,4 +97,59 @@ void main() {
     expect(game.placed.length, 1);
     expect(game.placed.first.rect.area, 2);
   });
+
+  test('hint shows ghost preview without placing a rectangle', () {
+    final game = GameController(1, seed: 42)..hapticsEnabled = false;
+    final before = game.placed.length;
+    final hintsBefore = game.hintsLeft;
+
+    game.useHint();
+
+    expect(game.hintsLeft, hintsBefore - 1);
+    expect(game.hintsUsed, 1);
+    expect(game.hintPreviewRect, isNotNull);
+    expect(game.hintedClueIndex, isNotNull);
+    expect(game.placed.length, before);
+  });
+
+  test('wand places exactly one rectangle', () {
+    final game = GameController(1, seed: 42)..hapticsEnabled = false;
+    final totalClues = game.puzzle.clues.length;
+
+    game.useWand();
+
+    expect(game.wandUsed, 1);
+    expect(game.wandsLeft, 0);
+    expect(game.placed.length, 1);
+    expect(totalClues, greaterThan(1));
+    expect(game.solved, isFalse);
+  });
+
+  test('wand prefers last interacted clue region', () {
+    GameController? game;
+  (int clueIndex, GridRect rect)? preferred;
+    for (var seed = 1; seed <= 50; seed++) {
+      final candidate = GameController(1, seed: seed)..hapticsEnabled = false;
+      final regions = <(int, GridRect)>[
+        for (var i = 0; i < candidate.puzzle.solution.length; i++)
+          (i, candidate.puzzle.solution[i]),
+      ]..sort((a, b) => a.$2.area.compareTo(b.$2.area));
+      if (regions.length >= 2 &&
+          regions.first.$2.area < regions.last.$2.area) {
+        game = candidate;
+        preferred = regions.last;
+        break;
+      }
+    }
+
+    expect(game, isNotNull, reason: 'need varied region sizes');
+    final target = preferred!;
+    final clue = game!.puzzle.clues[target.$1];
+    game.startDrag(clue.row, clue.col);
+    game.endDrag();
+    game.useWand();
+
+    expect(game.placed.length, 1);
+    expect(game.placed.first.rect, target.$2);
+  });
 }
