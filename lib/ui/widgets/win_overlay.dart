@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import 'mascot.dart';
+import 'win_screens/win_screen_variant.dart';
 
 /// Celebratory overlay shown when a puzzle is solved. Lets the player pick the
 /// next level via a slider and continue.
 class WinOverlay extends StatefulWidget {
   final int solvedLevel;
+  final WinScreenVariant variant;
   final ValueChanged<int> onContinue;
 
   const WinOverlay({
     super.key,
     required this.solvedLevel,
+    required this.variant,
     required this.onContinue,
   });
 
@@ -36,6 +39,8 @@ class _WinOverlayState extends State<WinOverlay>
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
+    final copy = widget.variant.copy;
+    final headlineColor = widget.variant.headlineColor(colors);
     final maxLevel = (widget.solvedLevel + 30).toDouble();
     final minLevel = 1.0;
 
@@ -52,21 +57,21 @@ class _WinOverlayState extends State<WinOverlay>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Mascot(size: 150),
+                    Mascot(size: 150, variant: copy.mascotVariant),
                     const SizedBox(height: 24),
                     Text(
-                      'Flawless!',
+                      copy.headline,
                       style: TextStyle(
                         fontFamily: AppTheme.serif,
                         fontStyle: FontStyle.italic,
                         fontWeight: FontWeight.w700,
                         fontSize: 40,
-                        color: colors.accent,
+                        color: headlineColor,
                       ),
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'You trusted your logic and it paid off perfectly.',
+                      copy.subtitle,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontFamily: AppTheme.serif,
@@ -105,8 +110,8 @@ class _WinOverlayState extends State<WinOverlay>
                     ),
                     SliderTheme(
                       data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: colors.accent,
-                        thumbColor: colors.accent,
+                        activeTrackColor: headlineColor,
+                        thumbColor: headlineColor,
                         inactiveTrackColor: colors.subtleText.withValues(alpha: 0.3),
                       ),
                       child: Slider(

@@ -6,19 +6,28 @@ import '../../theme/app_theme.dart';
 /// rectangles with a check-mark eye, echoing the benchmark win screen.
 class Mascot extends StatelessWidget {
   final double size;
-  const Mascot({super.key, this.size = 140});
+  final int variant;
+
+  const Mascot({super.key, this.size = 140, this.variant = 0});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(painter: _MascotPainter()),
+      child: CustomPaint(painter: _MascotPainter(variant: variant)),
     );
   }
 }
 
 class _MascotPainter extends CustomPainter {
+  final int variant;
+
+  const _MascotPainter({required this.variant});
+
+  Color _palette(int index, bool isDark) =>
+      RectPalette.at(index + variant, isDark);
+
   @override
   void paint(Canvas canvas, Size size) {
     final r = RRect.fromRectAndRadius(
@@ -31,9 +40,9 @@ class _MascotPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    final red = Paint()..color = RectPalette.light[7];
-    final orange = Paint()..color = RectPalette.light[9];
-    final blue = Paint()..color = RectPalette.light[1];
+    final red = Paint()..color = _palette(7, false);
+    final orange = Paint()..color = _palette(9, false);
+    final blue = Paint()..color = _palette(1, false);
 
     // Left column (red), top-right (orange), bottom band (blue).
     canvas.drawRect(Rect.fromLTWH(0, 0, w * 0.42, h * 0.72), red);
@@ -96,5 +105,6 @@ class _MascotPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _MascotPainter oldDelegate) =>
+      oldDelegate.variant != variant;
 }

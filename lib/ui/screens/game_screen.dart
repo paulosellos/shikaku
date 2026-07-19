@@ -8,6 +8,7 @@ import '../widgets/board_view.dart';
 import '../widgets/settings_sheet.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/win_overlay.dart';
+import '../widgets/win_screens/win_screen_picker.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -42,14 +43,24 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<void> _showWin() async {
     final scope = AppScope.of(context);
+    final game = scope.game;
+    final variant = WinScreenPicker.pick(
+      difficulty: game.difficulty,
+      boardSize: game.puzzle.rows,
+      elapsed: game.elapsed,
+      hintsUsed: game.hintsUsed,
+      wandUsed: game.wandUsed,
+      undoCount: game.undoCount,
+    );
     await Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
         pageBuilder: (_, __, ___) => WinOverlay(
-          solvedLevel: scope.game.puzzle.level,
+          solvedLevel: game.puzzle.level,
+          variant: variant,
           onContinue: (nextLevel) {
-            scope.settings.setLevelFor(scope.game.difficulty, nextLevel);
-            scope.game.loadLevel(nextLevel);
+            scope.settings.setLevelFor(game.difficulty, nextLevel);
+            game.loadLevel(nextLevel);
             Navigator.of(context).pop();
           },
         ),
