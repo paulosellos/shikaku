@@ -151,7 +151,6 @@ class _BoardViewState extends State<BoardView> {
                     preview: game.preview,
                     previewColorIndex: game.previewColorIndex,
                     hintPreview: game.hintPreviewRect,
-                    hintedClueIndex: game.hintedClueIndex,
                     colors: colors,
                     cell: cell,
                   ),
@@ -171,7 +170,6 @@ class _BoardPainter extends CustomPainter {
   final GridRect? preview;
   final int previewColorIndex;
   final GridRect? hintPreview;
-  final int? hintedClueIndex;
   final AppColors colors;
   final double cell;
 
@@ -181,7 +179,6 @@ class _BoardPainter extends CustomPainter {
     required this.preview,
     required this.previewColorIndex,
     required this.hintPreview,
-    required this.hintedClueIndex,
     required this.colors,
     required this.cell,
   });
@@ -224,7 +221,7 @@ class _BoardPainter extends CustomPainter {
       canvas.drawRRect(rrect, border);
     }
 
-    // Ghost hint — semi-transparent fill + dashed accent border.
+    // Ghost hint — same palette slot as the next committed rectangle.
     final hint = hintPreview;
     if (hint != null) {
       final rect = Rect.fromLTWH(
@@ -234,7 +231,8 @@ class _BoardPainter extends CustomPainter {
         hint.height * cell - 2 * margin,
       );
       final rrect = RRect.fromRectAndRadius(rect, radius);
-      final fill = Paint()..color = colors.accent.withValues(alpha: 0.18);
+      final base = RectPalette.at(previewColorIndex, colors.isDark);
+      final fill = Paint()..color = base.withValues(alpha: 0.45);
       canvas.drawRRect(rrect, fill);
       _drawDashedRRect(
         canvas,
@@ -242,7 +240,7 @@ class _BoardPainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = cell * 0.035
-          ..color = colors.accent.withValues(alpha: 0.85),
+          ..color = base.withValues(alpha: 0.9),
         dash: cell * 0.12,
         gap: cell * 0.08,
       );
@@ -278,17 +276,7 @@ class _BoardPainter extends CustomPainter {
       final owners = placed
           .where((p) => p.rect.containsCell(clue.row, clue.col))
           .length;
-      final isHinted = hintedClueIndex == i;
-      final color = isHinted
-          ? colors.accent
-          : (owners == 1 ? colors.rectText : colors.cellText);
-      if (isHinted) {
-        final ring = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = cell * 0.04
-          ..color = colors.accent.withValues(alpha: 0.7);
-        canvas.drawCircle(center, cell * 0.28, ring);
-      }
+      final color = owners == 1 ? colors.rectText : colors.cellText;
       _drawNumber(canvas, clue.value, center, color);
     }
   }
@@ -333,7 +321,6 @@ class _BoardPainter extends CustomPainter {
       old.preview != preview ||
       old.previewColorIndex != previewColorIndex ||
       old.hintPreview != hintPreview ||
-      old.hintedClueIndex != hintedClueIndex ||
       old.colors.isDark != colors.isDark ||
       old.cell != cell;
 }
