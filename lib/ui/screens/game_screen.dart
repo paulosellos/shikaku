@@ -58,10 +58,15 @@ class _GameScreenState extends State<GameScreen> {
         pageBuilder: (_, __, ___) => WinOverlay(
           solvedLevel: game.puzzle.level,
           variant: variant,
-          onContinue: (nextLevel) {
-            scope.settings.setLevelFor(game.difficulty, nextLevel);
-            game.loadLevel(nextLevel);
+          onContinue: (nextLevel) async {
             Navigator.of(context).pop();
+            scope.settings.recordPuzzleWin();
+            scope.settings.setLevelFor(game.difficulty, nextLevel);
+            if (scope.settings.shouldShowInterstitial &&
+                scope.ads.isInterstitialReady) {
+              await scope.ads.showInterstitialAd();
+            }
+            game.loadLevel(nextLevel);
           },
         ),
       ),
@@ -81,12 +86,13 @@ class _GameScreenState extends State<GameScreen> {
     final scope = AppScope.of(context);
     final game = scope.game;
     final settings = scope.settings;
+    final ads = scope.ads;
     final colors = AppColors.of(context);
 
     return Scaffold(
       body: SafeArea(
         child: AnimatedBuilder(
-          animation: Listenable.merge([game, settings]),
+          animation: Listenable.merge([game, settings, ads]),
           builder: (context, _) {
             final level = game.puzzle.level;
             return Column(
@@ -123,11 +129,15 @@ class _GameScreenState extends State<GameScreen> {
                     canUndo: game.canUndo,
                     wandsLeft: game.wandsLeft,
                     hintsLeft: game.hintsLeft,
+                    wandRewardAvailable:
+                        game.wandsLeft == 0 && ads.isRewardedReady,
+                    hintRewardAvailable:
+                        game.hintsLeft == 0 && ads.isRewardedReady,
                     onEraseToggle: () =>
                         setState(() => _eraseMode = !_eraseMode),
                     onUndo: game.undo,
-                    onWand: () => _confirmWand(context, game, colors),
-                    onHint: game.useHint,
+                    onWand: () => _onWandTap(context, game, colors),
+                    onHint: () => _onHintTap(context, game, colors),
                   ),
                 ),
               ],
@@ -136,6 +146,97 @@ class _GameScreenState extends State<GameScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _onWandTap(
+    BuildContext context,
+    GameController game,
+    AppColors colors,
+  ) async {
+    if (game.solved) return;
+    if (game.wandsLeft > 0) {
+      await _confirmWand(context, game, colors);
+      return;
+    }
+    await _offerRewardedWand(context, colors);
+  }
+
+  Future<void> _onHintTap(
+    BuildContext context,
+    GameController game,
+    AppColors colors,
+  ) async {
+    if (game.solved) return;
+    if (game.hintsLeft > 0) {
+      game.useHint();
+      return;
+    }
+    await _offerRewardedHints(context, colors);
+  }
+
+  Future<void> _offerRewardedWand(BuildContext context, AppColors colors) async {
+    final scope = AppScope.of(context);
+    if (!scope.ads.isRewardedReady) return;
+    final watch = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: colors.background,
+        title: Text('Out of wand charges', style: AppTheme.title(colors)),
+        content: Text(
+          'Watch a short video to earn +1 magic wand charge.',
+          style: TextStyle(color: colors.headerText, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Not now', style: TextStyle(color: colors.subtleText)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Watch ad', style: TextStyle(color: colors.accent)),
+          ),
+        ],
+      ),
+    );
+    if (watch != true || !context.mounted) return;
+    final earned = await scope.ads.showRewardedAd();
+    if (earned && context.mounted) {
+      scope.game.addWandCharges(1);
+    }
+  }
+
+  Future<void> _offerRewardedHints(
+    BuildContext context,
+    AppColors colors,
+  ) async {
+    final scope = AppScope.of(context);
+    if (!scope.ads.isRewardedReady) return;
+    final watch = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: colors.background,
+        title: Text('Out of hints', style: AppTheme.title(colors)),
+        content: Text(
+          'Watch a short video to earn +2 hint charges.',
+          style: TextStyle(color: colors.headerText, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Not now', style: TextStyle(color: colors.subtleText)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Watch ad', style: TextStyle(color: colors.accent)),
+          ),
+        ],
+      ),
+    );
+    if (watch != true || !context.mounted) return;
+    final earned = await scope.ads.showRewardedAd();
+    if (earned && context.mounted) {
+      scope.game.addHintCharges(2);
+    }
   }
 
   Future<void> _confirmWand(
@@ -184,7 +285,9 @@ class _GameScreenState extends State<GameScreen> {
           'Drag across at least two cells to draw a rectangle. Tap or long-press '
           'a placed shape to remove it, or toggle the eraser tool.\n\n'
           'Hints show a ghost outline without placing it. The magic wand '
-          'places one correct rectangle.',
+          'places one correct rectangle.\n\n'
+          'When you run out of hints or wand charges, you can watch a short '
+          'video to earn more.',
           style: TextStyle(color: colors.headerText, height: 1.4),
         ),
         actions: [

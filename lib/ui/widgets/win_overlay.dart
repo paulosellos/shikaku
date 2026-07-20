@@ -9,7 +9,7 @@ import 'win_screens/win_screen_variant.dart';
 class WinOverlay extends StatefulWidget {
   final int solvedLevel;
   final WinScreenVariant variant;
-  final ValueChanged<int> onContinue;
+  final Future<void> Function(int nextLevel) onContinue;
 
   const WinOverlay({
     super.key,

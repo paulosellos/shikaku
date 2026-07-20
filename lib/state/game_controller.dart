@@ -216,6 +216,18 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addHintCharges(int amount) {
+    if (amount <= 0) return;
+    hintsLeft += amount;
+    notifyListeners();
+  }
+
+  void addWandCharges(int amount) {
+    if (amount <= 0) return;
+    wandsLeft += amount;
+    notifyListeners();
+  }
+
   void clearHintPreview() {
     if (hintPreviewRect == null && hintedClueIndex == null) return;
     _clearHintPreview();

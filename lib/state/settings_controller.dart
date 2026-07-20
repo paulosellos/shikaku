@@ -12,6 +12,10 @@ class SettingsController extends ChangeNotifier {
   static const _kShowSizeCounter = 'show_size_counter';
   static const _kLastPuzzleDifficulty = 'last_difficulty';
   static const _kLevelPrefix = 'current_level_';
+  static const _kPuzzlesCompleted = 'puzzles_completed';
+
+  /// Show an interstitial after every N puzzle wins.
+  static const interstitialEveryN = 3;
 
   ThemeMode _themeMode = ThemeMode.system;
   bool _haptics = true;
@@ -23,6 +27,7 @@ class SettingsController extends ChangeNotifier {
     PuzzleDifficulty.medium: 1,
     PuzzleDifficulty.hard: 1,
   };
+  int _puzzlesCompleted = 0;
 
   ThemeMode get themeMode => _themeMode;
   bool get haptics => _haptics;
@@ -31,6 +36,12 @@ class SettingsController extends ChangeNotifier {
   PuzzleDifficulty get lastDifficulty => _lastDifficulty;
 
   int levelFor(PuzzleDifficulty difficulty) => _levels[difficulty] ?? 1;
+
+  int get puzzlesCompleted => _puzzlesCompleted;
+
+  bool get shouldShowInterstitial =>
+      _puzzlesCompleted > 0 &&
+      _puzzlesCompleted % interstitialEveryN == 0;
 
   SharedPreferences? _prefs;
 
@@ -47,6 +58,7 @@ class SettingsController extends ChangeNotifier {
     for (final d in PuzzleDifficulty.values) {
       _levels[d] = p.getInt('$_kLevelPrefix${d.name}') ?? 1;
     }
+    _puzzlesCompleted = p.getInt(_kPuzzlesCompleted) ?? 0;
     notifyListeners();
   }
 
@@ -83,6 +95,12 @@ class SettingsController extends ChangeNotifier {
   void setLevelFor(PuzzleDifficulty difficulty, int level) {
     _levels[difficulty] = level;
     _prefs?.setInt('$_kLevelPrefix${difficulty.name}', level);
+    notifyListeners();
+  }
+
+  void recordPuzzleWin() {
+    _puzzlesCompleted++;
+    _prefs?.setInt(_kPuzzlesCompleted, _puzzlesCompleted);
     notifyListeners();
   }
 }

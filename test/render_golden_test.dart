@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:shikaku_game/services/ads_service.dart';
 import 'package:shikaku_game/state/app_scope.dart';
 import 'package:shikaku_game/state/game_controller.dart';
 import 'package:shikaku_game/state/settings_controller.dart';
@@ -18,12 +19,14 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final settings = SettingsController();
+    final ads = AdsService();
     final game = GameController(2)..hapticsEnabled = false;
 
     await tester.pumpWidget(
       AppScope(
         settings: settings,
         game: game,
+        ads: ads,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.build(Brightness.dark),
@@ -55,12 +58,14 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final settings = SettingsController();
+    final ads = AdsService();
     final game = GameController(2)..hapticsEnabled = false;
 
     await tester.pumpWidget(
       AppScope(
         settings: settings,
         game: game,
+        ads: ads,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.build(Brightness.light),

@@ -8,6 +8,8 @@ class GameToolbar extends StatelessWidget {
   final bool canUndo;
   final int wandsLeft;
   final int hintsLeft;
+  final bool wandRewardAvailable;
+  final bool hintRewardAvailable;
   final VoidCallback onEraseToggle;
   final VoidCallback onUndo;
   final VoidCallback onWand;
@@ -19,6 +21,8 @@ class GameToolbar extends StatelessWidget {
     required this.canUndo,
     required this.wandsLeft,
     required this.hintsLeft,
+    this.wandRewardAvailable = false,
+    this.hintRewardAvailable = false,
     required this.onEraseToggle,
     required this.onUndo,
     required this.onWand,
@@ -46,15 +50,17 @@ class GameToolbar extends StatelessWidget {
         _ToolButton(
           icon: Icons.auto_fix_high_outlined,
           colors: colors,
-          enabled: wandsLeft > 0,
-          badge: wandsLeft,
+          enabled: wandsLeft > 0 || wandRewardAvailable,
+          badge: wandsLeft > 0 ? wandsLeft : null,
+          rewardOffer: wandsLeft == 0 && wandRewardAvailable,
           onTap: onWand,
         ),
         _ToolButton(
           icon: Icons.lightbulb_outline_rounded,
           colors: colors,
-          enabled: hintsLeft > 0,
-          badge: hintsLeft,
+          enabled: hintsLeft > 0 || hintRewardAvailable,
+          badge: hintsLeft > 0 ? hintsLeft : null,
+          rewardOffer: hintsLeft == 0 && hintRewardAvailable,
           onTap: onHint,
         ),
       ],
@@ -68,6 +74,7 @@ class _ToolButton extends StatelessWidget {
   final bool active;
   final bool enabled;
   final int? badge;
+  final bool rewardOffer;
   final VoidCallback onTap;
 
   const _ToolButton({
@@ -77,6 +84,7 @@ class _ToolButton extends StatelessWidget {
     this.active = false,
     this.enabled = true,
     this.badge,
+    this.rewardOffer = false,
   });
 
   @override
@@ -123,6 +131,23 @@ class _ToolButton extends StatelessWidget {
                   fontSize: 12,
                   color: colors.badgeText,
                 ),
+              ),
+            ),
+          ),
+        if (rewardOffer)
+          Positioned(
+            top: -8,
+            right: -6,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: colors.accent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                size: 14,
+                color: Colors.white,
               ),
             ),
           ),

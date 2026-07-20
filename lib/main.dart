@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'services/ads_service.dart';
 import 'state/app_scope.dart';
 import 'state/game_controller.dart';
 import 'state/settings_controller.dart';
@@ -10,18 +11,26 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final settings = SettingsController();
   await settings.load();
+  final ads = AdsService();
+  await ads.initialize();
   final game = GameController(
     settings.levelFor(settings.lastDifficulty),
     difficulty: settings.lastDifficulty,
   )..hapticsEnabled = settings.haptics;
-  runApp(ShikakuApp(settings: settings, game: game));
+  runApp(ShikakuApp(settings: settings, game: game, ads: ads));
 }
 
 class ShikakuApp extends StatelessWidget {
   final SettingsController settings;
   final GameController game;
+  final AdsService ads;
 
-  const ShikakuApp({super.key, required this.settings, required this.game});
+  const ShikakuApp({
+    super.key,
+    required this.settings,
+    required this.game,
+    required this.ads,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +40,7 @@ class ShikakuApp extends StatelessWidget {
         return AppScope(
           settings: settings,
           game: game,
+          ads: ads,
           child: MaterialApp(
             title: 'Shikaku',
             debugShowCheckedModeBanner: false,
