@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'game_controller.dart';
 import 'settings_controller.dart';
+import 'wallet_controller.dart';
 import '../services/ads_service.dart';
 import '../services/analytics_service.dart';
 import '../services/purchase_service.dart';
@@ -10,6 +11,7 @@ import '../services/purchase_service.dart';
 class AppScope extends InheritedWidget {
   final GameController game;
   final SettingsController settings;
+  final WalletController wallet;
   final AdsService ads;
   final AnalyticsService analytics;
   final PurchaseService purchases;
@@ -18,6 +20,7 @@ class AppScope extends InheritedWidget {
     super.key,
     required this.game,
     required this.settings,
+    required this.wallet,
     required this.ads,
     required this.analytics,
     required this.purchases,
@@ -34,6 +37,7 @@ class AppScope extends InheritedWidget {
   bool updateShouldNotify(AppScope oldWidget) =>
       game != oldWidget.game ||
       settings != oldWidget.settings ||
+      wallet != oldWidget.wallet ||
       ads != oldWidget.ads ||
       analytics != oldWidget.analytics ||
       purchases != oldWidget.purchases;

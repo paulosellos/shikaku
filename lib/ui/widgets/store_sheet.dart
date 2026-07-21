@@ -46,9 +46,6 @@ class StoreSheet extends StatelessWidget {
     return AnimatedBuilder(
       animation: Listenable.merge([settings, purchases]),
       builder: (context, _) {
-        final removeAdsProduct = purchases.productFor(StoreSkus.removeAds);
-        final price = removeAdsProduct?.price ?? '\$4.99';
-
         return Container(
           decoration: BoxDecoration(
             color: colors.background,
@@ -79,7 +76,21 @@ class StoreSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              if (settings.isAdFree)
+              if (!settings.isAdFree) ...[
+                _productTile(
+                  context,
+                  colors: colors,
+                  title: 'Remove ads',
+                  subtitle: 'No more interstitials between puzzles',
+                  price: purchases.priceFor(StoreSkus.removeAds) ?? '\$4.99',
+                  onBuy: () => _buy(
+                    context,
+                    StoreSkus.removeAds,
+                    purchases.priceFor(StoreSkus.removeAds) ?? '\$4.99',
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ] else
                 _card(
                   colors,
                   child: Row(
@@ -88,23 +99,22 @@ class StoreSheet extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'You have the ad-free version. Thanks for your support!',
+                          'Ad-free unlocked — thanks for your support!',
                           style: TextStyle(color: colors.headerText),
                         ),
                       ),
                     ],
                   ),
-                )
-              else
-                _productTile(
-                  context,
-                  colors: colors,
-                  title: 'Remove ads',
-                  subtitle: 'No more interstitials between puzzles',
-                  price: price,
-                  onBuy: () => _buy(context, StoreSkus.removeAds, price),
                 ),
-              const SizedBox(height: 12),
+              Text('Power-up bundles',
+                  style: AppTheme.title(colors).copyWith(fontSize: 18)),
+              const SizedBox(height: 10),
+              for (final sku in StoreSkus.consumables)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _bundleTile(context, colors, sku),
+                ),
+              const SizedBox(height: 8),
               TextButton(
                 onPressed: () => _restore(context),
                 child: Text('Restore purchases',
@@ -141,6 +151,33 @@ class StoreSheet extends StatelessWidget {
     if (!context.mounted) return;
     await analytics.logRestorePurchases(
       restoredCount: settings.isAdFree && !before ? 1 : 0,
+    );
+  }
+
+  Widget _bundleTile(BuildContext context, AppColors colors, String sku) {
+    final grant = BundleGrant.bySku[sku]!;
+    final title = switch (sku) {
+      StoreSkus.hintsPackSmall => '10 hints',
+      StoreSkus.wandsPackSmall => '3 wands',
+      StoreSkus.comboPack => 'Combo pack',
+      StoreSkus.megaPack => 'Mega pack',
+      _ => sku,
+    };
+    final subtitle = switch (sku) {
+      StoreSkus.comboPack => '+${grant.hints} hints, +${grant.wands} wands',
+      StoreSkus.megaPack => '+${grant.hints} hints, +${grant.wands} wands',
+      StoreSkus.hintsPackSmall => 'Saved to your wallet across puzzles',
+      StoreSkus.wandsPackSmall => 'Saved to your wallet across puzzles',
+      _ => '',
+    };
+    final price = purchases.priceFor(sku) ?? '—';
+    return _productTile(
+      context,
+      colors: colors,
+      title: title,
+      subtitle: subtitle,
+      price: price,
+      onBuy: () => _buy(context, sku, price),
     );
   }
 

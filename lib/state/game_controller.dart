@@ -5,6 +5,7 @@ import '../logic/generator.dart';
 import '../logic/validator.dart';
 import '../models/puzzle_difficulty.dart';
 import '../models/puzzle.dart';
+import 'wallet_controller.dart';
 
 /// Holds the live state of one puzzle: placed rectangles, the current drag
 /// preview, undo history, tool charges, and per-level usage stats.
@@ -27,6 +28,7 @@ class GameController extends ChangeNotifier {
 
   int hintsLeft = 6;
   int wandsLeft = 1;
+  WalletController? wallet;
   bool _solved = false;
   final Stopwatch _stopwatch = Stopwatch();
 
@@ -48,6 +50,8 @@ class GameController extends ChangeNotifier {
   int get previewColorIndex => _colorCounter;
   bool get solved => _solved;
   bool get canUndo => _history.isNotEmpty;
+  int get hintsAvailable => hintsLeft + (wallet?.hints ?? 0);
+  int get wandsAvailable => wandsLeft + (wallet?.wands ?? 0);
   Duration get elapsed => _stopwatch.elapsed;
 
   GameController(
@@ -181,10 +185,11 @@ class GameController extends ChangeNotifier {
   }
 
   /// Shows a ghost outline for one unsolved region without placing it.
-  void useHint() {
-    if (hintsLeft <= 0 || _solved) return;
+  bool useHint() {
+    if (_solved || hintsAvailable <= 0) return false;
     final target = _pickHintTarget();
-    if (target == null) return;
+    if (target == null) return false;
+    if (!_spendHintCharge()) return false;
 
     _hintGhosts.add(
       HintGhost(
@@ -193,28 +198,29 @@ class GameController extends ChangeNotifier {
         colorIndex: _colorCounter + _hintGhosts.length,
       ),
     );
-    hintsLeft--;
     hintsUsed++;
     _tick();
     notifyListeners();
+    return true;
   }
 
   /// Auto-places exactly one unsolved rectangle from the solution.
-  void useWand() {
-    if (wandsLeft <= 0 || _solved) return;
+  bool useWand() {
+    if (_solved || wandsAvailable <= 0) return false;
     final target = _pickTargetRegion();
-    if (target == null) return;
+    if (target == null) return false;
+    if (!_spendWandCharge()) return false;
 
     final sol = target.$2;
     _pushHistory();
     _placed.removeWhere((p) => p.rect.intersects(sol));
     _placed.add(PlacedRect(sol, _colorCounter++));
     _hintGhosts.removeWhere((h) => h.clueIndex == target.$1);
-    wandsLeft--;
     wandUsed++;
     _tick();
     _checkSolved();
     notifyListeners();
+    return true;
   }
 
   void addHintCharges(int amount) {
@@ -233,6 +239,22 @@ class GameController extends ChangeNotifier {
     if (_hintGhosts.isEmpty) return;
     _clearHintGhosts();
     notifyListeners();
+  }
+
+  bool _spendHintCharge() {
+    if (hintsLeft > 0) {
+      hintsLeft--;
+      return true;
+    }
+    return wallet?.spendHint() ?? false;
+  }
+
+  bool _spendWandCharge() {
+    if (wandsLeft > 0) {
+      wandsLeft--;
+      return true;
+    }
+    return wallet?.spendWand() ?? false;
   }
 
   // --- Helpers --------------------------------------------------------------

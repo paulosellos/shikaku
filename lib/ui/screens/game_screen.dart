@@ -8,6 +8,7 @@ import '../../state/game_controller.dart';
 import '../../state/settings_controller.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/board_view.dart';
+import '../widgets/power_up_offer_sheet.dart';
 import '../widgets/settings_sheet.dart';
 import '../widgets/store_sheet.dart';
 import '../widgets/toolbar.dart';
@@ -125,6 +126,7 @@ class _GameScreenState extends State<GameScreen> {
     final game = scope.game;
     final settings = scope.settings;
     final ads = scope.ads;
+    final wallet = scope.wallet;
     final colors = AppColors.of(context);
 
     return PopScope(
@@ -140,7 +142,7 @@ class _GameScreenState extends State<GameScreen> {
       child: Scaffold(
       body: SafeArea(
         child: AnimatedBuilder(
-          animation: Listenable.merge([game, settings, ads]),
+          animation: Listenable.merge([game, settings, ads, wallet]),
           builder: (context, _) {
             final level = game.puzzle.level;
             return Column(
@@ -174,12 +176,10 @@ class _GameScreenState extends State<GameScreen> {
                   child: GameToolbar(
                     eraseActive: _eraseMode,
                     canUndo: game.canUndo,
-                    wandsLeft: game.wandsLeft,
-                    hintsLeft: game.hintsLeft,
-                    wandRewardAvailable:
-                        game.wandsLeft == 0 && ads.isRewardedReady,
-                    hintRewardAvailable:
-                        game.hintsLeft == 0 && ads.isRewardedReady,
+                    wandsAvailable: game.wandsAvailable,
+                    hintsAvailable: game.hintsAvailable,
+                    wandOfferAvailable: game.wandsAvailable == 0,
+                    hintOfferAvailable: game.hintsAvailable == 0,
                     onEraseToggle: () =>
                         setState(() => _eraseMode = !_eraseMode),
                     onUndo: () {
@@ -240,12 +240,21 @@ class _GameScreenState extends State<GameScreen> {
     AppColors colors,
   ) async {
     if (game.solved) return;
-    if (game.wandsLeft > 0) {
+    final scope = AppScope.of(context);
+    if (game.wandsAvailable > 0) {
       await _confirmWand(context, game, colors);
       return;
     }
-    AppScope.of(context).analytics.logPowerupDepleted('wand');
-    await _offerRewardedWand(context, colors);
+    scope.analytics.logPowerupDepleted('wand');
+    await PowerUpOfferSheet.show(
+      context,
+      type: PowerUpOfferType.wand,
+      game: game,
+      settings: scope.settings,
+      ads: scope.ads,
+      purchases: scope.purchases,
+      analytics: scope.analytics,
+    );
   }
 
   Future<void> _onHintTap(
@@ -255,113 +264,26 @@ class _GameScreenState extends State<GameScreen> {
   ) async {
     if (game.solved) return;
     final scope = AppScope.of(context);
-    if (game.hintsLeft > 0) {
-      game.useHint();
-      scope.analytics.logHintUsed(
-        hintsRemaining: game.hintsLeft,
-        ghostCount: game.hintGhosts.length,
-      );
+    if (game.hintsAvailable > 0) {
+      final used = game.useHint();
+      if (used) {
+        scope.analytics.logHintUsed(
+          hintsRemaining: game.hintsAvailable,
+          ghostCount: game.hintGhosts.length,
+        );
+      }
       return;
     }
     scope.analytics.logPowerupDepleted('hint');
-    await _offerRewardedHints(context, colors);
-  }
-
-  Future<void> _offerRewardedWand(BuildContext context, AppColors colors) async {
-    final scope = AppScope.of(context);
-    if (!scope.ads.isRewardedReady) return;
-    const rewardAmount = 1;
-    await scope.analytics.logRewardedAdOffered(
-      type: 'wand',
-      rewardAmount: rewardAmount,
+    await PowerUpOfferSheet.show(
+      context,
+      type: PowerUpOfferType.hint,
+      game: game,
+      settings: scope.settings,
+      ads: scope.ads,
+      purchases: scope.purchases,
+      analytics: scope.analytics,
     );
-    final watch = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: colors.background,
-        title: Text('Out of wand charges', style: AppTheme.title(colors)),
-        content: Text(
-          'Watch a short video to earn +1 magic wand charge.',
-          style: TextStyle(color: colors.headerText, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Not now', style: TextStyle(color: colors.subtleText)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Watch ad', style: TextStyle(color: colors.accent)),
-          ),
-        ],
-      ),
-    );
-    if (watch != true || !context.mounted) {
-      if (watch == false) {
-        await scope.analytics.logRewardedAdDismissed('wand');
-      }
-      return;
-    }
-    final earned = await scope.ads.showRewardedAd();
-    if (earned && context.mounted) {
-      scope.game.addWandCharges(rewardAmount);
-      await scope.analytics.logRewardedAdCompleted(
-        type: 'wand',
-        rewardAmount: rewardAmount,
-      );
-    } else if (context.mounted) {
-      await scope.analytics.logRewardedAdDismissed('wand');
-    }
-  }
-
-  Future<void> _offerRewardedHints(
-    BuildContext context,
-    AppColors colors,
-  ) async {
-    final scope = AppScope.of(context);
-    if (!scope.ads.isRewardedReady) return;
-    const rewardAmount = 2;
-    await scope.analytics.logRewardedAdOffered(
-      type: 'hint',
-      rewardAmount: rewardAmount,
-    );
-    final watch = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: colors.background,
-        title: Text('Out of hints', style: AppTheme.title(colors)),
-        content: Text(
-          'Watch a short video to earn +2 hint charges.',
-          style: TextStyle(color: colors.headerText, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Not now', style: TextStyle(color: colors.subtleText)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Watch ad', style: TextStyle(color: colors.accent)),
-          ),
-        ],
-      ),
-    );
-    if (watch != true || !context.mounted) {
-      if (watch == false) {
-        await scope.analytics.logRewardedAdDismissed('hint');
-      }
-      return;
-    }
-    final earned = await scope.ads.showRewardedAd();
-    if (earned && context.mounted) {
-      scope.game.addHintCharges(rewardAmount);
-      await scope.analytics.logRewardedAdCompleted(
-        type: 'hint',
-        rewardAmount: rewardAmount,
-      );
-    } else if (context.mounted) {
-      await scope.analytics.logRewardedAdDismissed('hint');
-    }
   }
 
   Future<void> _confirmWand(
@@ -369,15 +291,15 @@ class _GameScreenState extends State<GameScreen> {
     GameController game,
     AppColors colors,
   ) async {
-    if (game.wandsLeft <= 0 || game.solved) return;
+    if (game.wandsAvailable <= 0 || game.solved) return;
     final use = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: colors.background,
         title: Text('Use magic wand?', style: AppTheme.title(colors)),
         content: Text(
-          'This will place one correct rectangle for you. You only have '
-          '${game.wandsLeft} charge${game.wandsLeft == 1 ? '' : 's'} left.',
+          'This will place one correct rectangle for you. You have '
+          '${game.wandsAvailable} charge${game.wandsAvailable == 1 ? '' : 's'} left.',
           style: TextStyle(color: colors.headerText, height: 1.4),
         ),
         actions: [
@@ -393,10 +315,12 @@ class _GameScreenState extends State<GameScreen> {
       ),
     );
     if (use == true && context.mounted) {
-      game.useWand();
-      AppScope.of(context).analytics.logWandUsed(
-        wandsRemaining: game.wandsLeft,
-      );
+      final used = game.useWand();
+      if (used) {
+        AppScope.of(context).analytics.logWandUsed(
+          wandsRemaining: game.wandsAvailable,
+        );
+      }
     }
   }
 
@@ -414,8 +338,8 @@ class _GameScreenState extends State<GameScreen> {
           'a placed shape to remove it, or toggle the eraser tool.\n\n'
           'Hints show a ghost outline without placing it. The magic wand '
           'places one correct rectangle.\n\n'
-          'When you run out of hints or wand charges, you can watch a short '
-          'video to earn more.',
+          'When you run out of hints or wand charges, watch a short video '
+          'or buy a bundle from the store.',
           style: TextStyle(color: colors.headerText, height: 1.4),
         ),
         actions: [
