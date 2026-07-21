@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/puzzle_difficulty.dart';
 import '../../state/app_scope.dart';
 import '../../state/game_controller.dart';
+import '../../state/settings_controller.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/board_view.dart';
 import '../widgets/settings_sheet.dart';
@@ -57,8 +60,10 @@ class _GameScreenState extends State<GameScreen> {
         opaque: false,
         pageBuilder: (_, __, ___) => WinOverlay(
           solvedLevel: game.puzzle.level,
+          elapsed: game.elapsed,
           variant: variant,
-          onContinue: (nextLevel) async {
+          onContinue: () async {
+            final nextLevel = game.puzzle.level + 1;
             Navigator.of(context).pop();
             scope.settings.recordPuzzleWin();
             scope.settings.setLevelFor(game.difficulty, nextLevel);
@@ -107,10 +112,6 @@ class _GameScreenState extends State<GameScreen> {
                     settings: settings,
                     game: game,
                   ),
-                  onSkip: () {
-                    settings.setLevelFor(game.difficulty, level + 1);
-                    game.loadLevel(level + 1);
-                  },
                 ),
                 if (settings.showTimer || settings.showSizeCounter)
                   _StatusBar(colors: colors),
@@ -307,7 +308,6 @@ class _Header extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onHelp;
   final VoidCallback onSettings;
-  final VoidCallback onSkip;
 
   const _Header({
     required this.title,
@@ -315,44 +315,23 @@ class _Header extends StatelessWidget {
     required this.onBack,
     required this.onHelp,
     required this.onSettings,
-    required this.onSkip,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              _iconButton(Icons.arrow_back, onBack),
-              Expanded(
-                child: Center(
-                  child: Text(title, style: AppTheme.title(colors)),
-                ),
-              ),
-              _iconButton(Icons.chat_bubble_outline_rounded, onHelp),
-              const SizedBox(width: 8),
-              _iconButton(Icons.settings_outlined, onSettings),
-            ],
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: GestureDetector(
-              onTap: onSkip,
-              child: Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: colors.cell,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.keyboard_double_arrow_right,
-                    color: colors.toolbarIcon, size: 20),
-              ),
+          _iconButton(Icons.arrow_back, onBack),
+          Expanded(
+            child: Center(
+              child: Text(title, style: AppTheme.title(colors)),
             ),
           ),
+          _iconButton(Icons.chat_bubble_outline_rounded, onHelp),
+          const SizedBox(width: 8),
+          _iconButton(Icons.settings_outlined, onSettings),
         ],
       ),
     );
@@ -368,20 +347,69 @@ class _Header extends StatelessWidget {
       );
 }
 
-class _StatusBar extends StatelessWidget {
+class _StatusBar extends StatefulWidget {
   final AppColors colors;
   const _StatusBar({required this.colors});
 
   @override
-  Widget build(BuildContext context) {
+  State<_StatusBar> createState() => _StatusBarState();
+}
+
+class _StatusBarState extends State<_StatusBar> {
+  Timer? _timer;
+  GameController? _game;
+  SettingsController? _settings;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final scope = AppScope.of(context);
-    final game = scope.game;
-    final settings = scope.settings;
+    if (!identical(_game, scope.game) ||
+        !identical(_settings, scope.settings)) {
+      _game?.removeListener(_onListenableChanged);
+      _settings?.removeListener(_onListenableChanged);
+      _game = scope.game;
+      _settings = scope.settings;
+      _game!.addListener(_onListenableChanged);
+      _settings!.addListener(_onListenableChanged);
+      _syncTimer();
+    }
+  }
+
+  void _onListenableChanged() {
+    _syncTimer();
+    if (mounted) setState(() {});
+  }
+
+  void _syncTimer() {
+    final shouldTick =
+        (_settings?.showTimer ?? false) && !(_game?.solved ?? true);
+    if (shouldTick && _timer == null) {
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else if (!shouldTick) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _game?.removeListener(_onListenableChanged);
+    _settings?.removeListener(_onListenableChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final game = _game ?? AppScope.of(context).game;
+    final settings = _settings ?? AppScope.of(context).settings;
     final placedCells =
         game.placed.fold<int>(0, (sum, p) => sum + p.rect.area);
     final d = game.elapsed;
-    final time =
-        '${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+    final time = AppTheme.formatElapsed(d);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -389,12 +417,12 @@ class _StatusBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (settings.showTimer)
-            Text(time, style: AppTheme.monoLabel(colors)),
+            Text(time, style: AppTheme.monoLabel(widget.colors)),
           if (settings.showTimer && settings.showSizeCounter)
             const SizedBox(width: 20),
           if (settings.showSizeCounter)
             Text('$placedCells / ${game.puzzle.cellCount}',
-                style: AppTheme.monoLabel(colors)),
+                style: AppTheme.monoLabel(widget.colors)),
         ],
       ),
     );

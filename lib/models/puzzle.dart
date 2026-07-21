@@ -90,3 +90,17 @@ class PlacedRect {
 
   const PlacedRect(this.rect, this.colorIndex);
 }
+
+/// A ghost hint outline for one unsolved region (not placed on the board).
+@immutable
+class HintGhost {
+  final int clueIndex;
+  final GridRect rect;
+  final int colorIndex;
+
+  const HintGhost({
+    required this.clueIndex,
+    required this.rect,
+    required this.colorIndex,
+  });
+}

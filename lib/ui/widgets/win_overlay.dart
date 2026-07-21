@@ -4,16 +4,17 @@ import '../../theme/app_theme.dart';
 import 'mascot.dart';
 import 'win_screens/win_screen_variant.dart';
 
-/// Celebratory overlay shown when a puzzle is solved. Lets the player pick the
-/// next level via a slider and continue.
+/// Celebratory overlay shown when a puzzle is solved.
 class WinOverlay extends StatefulWidget {
   final int solvedLevel;
+  final Duration elapsed;
   final WinScreenVariant variant;
-  final Future<void> Function(int nextLevel) onContinue;
+  final Future<void> Function() onContinue;
 
   const WinOverlay({
     super.key,
     required this.solvedLevel,
+    required this.elapsed,
     required this.variant,
     required this.onContinue,
   });
@@ -24,7 +25,6 @@ class WinOverlay extends StatefulWidget {
 
 class _WinOverlayState extends State<WinOverlay>
     with SingleTickerProviderStateMixin {
-  late int _nextLevel = widget.solvedLevel + 1;
   late final AnimationController _anim = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 520),
@@ -41,8 +41,7 @@ class _WinOverlayState extends State<WinOverlay>
     final colors = AppColors.of(context);
     final copy = widget.variant.copy;
     final headlineColor = widget.variant.headlineColor(colors);
-    final maxLevel = (widget.solvedLevel + 30).toDouble();
-    final minLevel = 1.0;
+    final nextLevel = widget.solvedLevel + 1;
 
     return Material(
       color: colors.background.withValues(alpha: 0.96),
@@ -79,47 +78,15 @@ class _WinOverlayState extends State<WinOverlay>
                         color: colors.headerText,
                       ),
                     ),
-                    const SizedBox(height: 36),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'New game at level $_nextLevel',
-                            style: AppTheme.monoLabel(colors),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _nextLevel = minLevel.toInt() +
-                                  (DateTime.now().millisecondsSinceEpoch %
-                                      maxLevel.toInt());
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: colors.cell,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(Icons.casino_outlined,
-                                color: colors.headerText),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 16),
+                    Text(
+                      'Completed in ${AppTheme.formatElapsed(widget.elapsed)}',
+                      style: AppTheme.monoLabel(colors),
                     ),
-                    SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: headlineColor,
-                        thumbColor: headlineColor,
-                        inactiveTrackColor: colors.subtleText.withValues(alpha: 0.3),
-                      ),
-                      child: Slider(
-                        min: minLevel,
-                        max: maxLevel,
-                        value: _nextLevel.toDouble().clamp(minLevel, maxLevel),
-                        onChanged: (v) => setState(() => _nextLevel = v.round()),
-                      ),
+                    const SizedBox(height: 36),
+                    Text(
+                      'Next up: Level $nextLevel',
+                      style: AppTheme.monoLabel(colors),
                     ),
                     const SizedBox(height: 20),
                     SizedBox(
@@ -133,7 +100,7 @@ class _WinOverlayState extends State<WinOverlay>
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        onPressed: () => widget.onContinue(_nextLevel),
+                        onPressed: widget.onContinue,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [

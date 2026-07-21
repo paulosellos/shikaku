@@ -107,9 +107,53 @@ void main() {
 
     expect(game.hintsLeft, hintsBefore - 1);
     expect(game.hintsUsed, 1);
-    expect(game.hintPreviewRect, isNotNull);
-    expect(game.hintedClueIndex, isNotNull);
+    expect(game.hintGhosts, hasLength(1));
     expect(game.placed.length, before);
+  });
+
+  test('multiple hints stack on the board up to charges used', () {
+    final game = GameController(1, seed: 42)..hapticsEnabled = false;
+    final startingHints = game.hintsLeft;
+    for (var i = 0; i < startingHints; i++) {
+      game.useHint();
+    }
+
+    expect(game.hintGhosts, hasLength(startingHints));
+    expect(game.hintsLeft, 0);
+    expect(
+      game.hintGhosts.map((h) => h.clueIndex).toSet(),
+      hasLength(startingHints),
+    );
+  });
+
+  test('hint does not consume charge when every unsolved region is ghosted', () {
+    final game = GameController(1, seed: 42)..hapticsEnabled = false;
+    while (game.hintsLeft > 0) {
+      final before = game.hintGhosts.length;
+      game.useHint();
+      if (game.hintGhosts.length == before) break;
+    }
+    final ghosted = game.hintGhosts.length;
+    final hintsAfter = game.hintsLeft;
+    game.useHint();
+    expect(game.hintsLeft, hintsAfter);
+    expect(game.hintGhosts, hasLength(ghosted));
+  });
+
+  test('placing a hinted rectangle removes only that ghost', () {
+    final game = GameController(1, seed: 42)..hapticsEnabled = false;
+    game.useHint();
+    game.useHint();
+    expect(game.hintGhosts, hasLength(2));
+
+    final first = game.hintGhosts.first;
+    final sol = first.rect;
+    game.startDrag(sol.row, sol.col);
+    game.updateDrag(sol.bottom - 1, sol.right - 1);
+    game.endDrag();
+
+    expect(game.hintGhosts, hasLength(1));
+    expect(game.hintGhosts.first.clueIndex, isNot(first.clueIndex));
   });
 
   test('wand places exactly one rectangle', () {

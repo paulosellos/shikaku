@@ -150,7 +150,7 @@ class _BoardViewState extends State<BoardView> {
                     placed: game.placed,
                     preview: game.preview,
                     previewColorIndex: game.previewColorIndex,
-                    hintPreview: game.hintPreviewRect,
+                    hintGhosts: game.hintGhosts,
                     colors: colors,
                     cell: cell,
                   ),
@@ -169,7 +169,7 @@ class _BoardPainter extends CustomPainter {
   final List<PlacedRect> placed;
   final GridRect? preview;
   final int previewColorIndex;
-  final GridRect? hintPreview;
+  final List<HintGhost> hintGhosts;
   final AppColors colors;
   final double cell;
 
@@ -178,7 +178,7 @@ class _BoardPainter extends CustomPainter {
     required this.placed,
     required this.preview,
     required this.previewColorIndex,
-    required this.hintPreview,
+    required this.hintGhosts,
     required this.colors,
     required this.cell,
   });
@@ -221,17 +221,17 @@ class _BoardPainter extends CustomPainter {
       canvas.drawRRect(rrect, border);
     }
 
-    // Ghost hint — same palette slot as the next committed rectangle.
-    final hint = hintPreview;
-    if (hint != null) {
+    // Ghost hints — each uses its assigned palette slot.
+    for (final hint in hintGhosts) {
+      final gr = hint.rect;
       final rect = Rect.fromLTWH(
-        hint.col * cell + margin,
-        hint.row * cell + margin,
-        hint.width * cell - 2 * margin,
-        hint.height * cell - 2 * margin,
+        gr.col * cell + margin,
+        gr.row * cell + margin,
+        gr.width * cell - 2 * margin,
+        gr.height * cell - 2 * margin,
       );
       final rrect = RRect.fromRectAndRadius(rect, radius);
-      final base = RectPalette.at(previewColorIndex, colors.isDark);
+      final base = RectPalette.at(hint.colorIndex, colors.isDark);
       final fill = Paint()..color = base.withValues(alpha: 0.45);
       canvas.drawRRect(rrect, fill);
       _drawDashedRRect(
@@ -320,7 +320,7 @@ class _BoardPainter extends CustomPainter {
       old.placed != placed ||
       old.preview != preview ||
       old.previewColorIndex != previewColorIndex ||
-      old.hintPreview != hintPreview ||
+      old.hintGhosts != hintGhosts ||
       old.colors.isDark != colors.isDark ||
       old.cell != cell;
 }

@@ -30,9 +30,8 @@ class GameController extends ChangeNotifier {
   bool _solved = false;
   final Stopwatch _stopwatch = Stopwatch();
 
-  /// Semi-transparent outline of the hinted rectangle (not placed).
-  GridRect? hintPreviewRect;
-  int? hintedClueIndex;
+  /// Ghost outlines for hinted regions (not placed).
+  final List<HintGhost> _hintGhosts = [];
 
   /// Clue the player last touched — wand and hint prefer this region.
   int? lastInteractedClueIndex;
@@ -43,6 +42,7 @@ class GameController extends ChangeNotifier {
 
   Puzzle get puzzle => _puzzle;
   List<PlacedRect> get placed => List.unmodifiable(_placed);
+  List<HintGhost> get hintGhosts => List.unmodifiable(_hintGhosts);
   GridRect? get preview => _preview;
   /// Palette slot for the rectangle currently being drawn (preview).
   int get previewColorIndex => _colorCounter;
@@ -79,7 +79,7 @@ class GameController extends ChangeNotifier {
     hintsLeft = 6;
     wandsLeft = 1;
     _solved = false;
-    _clearHintPreview();
+    _clearHintGhosts();
     lastInteractedClueIndex = null;
     hintsUsed = 0;
     wandUsed = 0;
@@ -154,9 +154,7 @@ class GameController extends ChangeNotifier {
     _pushHistory();
     _placed.removeWhere((p) => p.rect.intersects(rect));
     _placed.add(PlacedRect(rect, _colorCounter++));
-    if (hintPreviewRect != null && hintPreviewRect == rect) {
-      _clearHintPreview();
-    }
+    _hintGhosts.removeWhere((h) => h.rect == rect);
     _checkSolved();
   }
 
@@ -185,11 +183,16 @@ class GameController extends ChangeNotifier {
   /// Shows a ghost outline for one unsolved region without placing it.
   void useHint() {
     if (hintsLeft <= 0 || _solved) return;
-    final target = _pickTargetRegion();
+    final target = _pickHintTarget();
     if (target == null) return;
 
-    hintPreviewRect = target.$2;
-    hintedClueIndex = target.$1;
+    _hintGhosts.add(
+      HintGhost(
+        clueIndex: target.$1,
+        rect: target.$2,
+        colorIndex: _colorCounter + _hintGhosts.length,
+      ),
+    );
     hintsLeft--;
     hintsUsed++;
     _tick();
@@ -206,9 +209,7 @@ class GameController extends ChangeNotifier {
     _pushHistory();
     _placed.removeWhere((p) => p.rect.intersects(sol));
     _placed.add(PlacedRect(sol, _colorCounter++));
-    if (hintPreviewRect != null && hintPreviewRect == sol) {
-      _clearHintPreview();
-    }
+    _hintGhosts.removeWhere((h) => h.clueIndex == target.$1);
     wandsLeft--;
     wandUsed++;
     _tick();
@@ -228,9 +229,9 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearHintPreview() {
-    if (hintPreviewRect == null && hintedClueIndex == null) return;
-    _clearHintPreview();
+  void clearHintGhosts() {
+    if (_hintGhosts.isEmpty) return;
+    _clearHintGhosts();
     notifyListeners();
   }
 
@@ -273,6 +274,24 @@ class GameController extends ChangeNotifier {
     return unsolved.first;
   }
 
+  /// Picks an unsolved region that does not already have a ghost hint.
+  (int clueIndex, GridRect rect)? _pickHintTarget() {
+    final hinted = _hintGhosts.map((h) => h.clueIndex).toSet();
+    final unsolved =
+        _unsolvedRegions().where((r) => !hinted.contains(r.$1)).toList();
+    if (unsolved.isEmpty) return null;
+
+    final last = lastInteractedClueIndex;
+    if (last != null && !hinted.contains(last)) {
+      for (final region in unsolved) {
+        if (region.$1 == last) return region;
+      }
+    }
+
+    unsolved.sort((a, b) => a.$2.area.compareTo(b.$2.area));
+    return unsolved.first;
+  }
+
   void _noteClueInteraction(int row, int col) {
     for (var i = 0; i < _puzzle.clues.length; i++) {
       final clue = _puzzle.clues[i];
@@ -283,9 +302,8 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  void _clearHintPreview() {
-    hintPreviewRect = null;
-    hintedClueIndex = null;
+  void _clearHintGhosts() {
+    _hintGhosts.clear();
   }
 
   void _checkSolved() {
