@@ -1,0 +1,51 @@
+/// Firebase Analytics event names and parameter keys.
+abstract final class AnalyticsEvents {
+  static const appOpen = 'app_open';
+  static const splashCompleted = 'splash_completed';
+  static const homeViewed = 'home_viewed';
+  static const difficultySelected = 'difficulty_selected';
+  static const playTapped = 'play_tapped';
+  static const settingsOpened = 'settings_opened';
+  static const gameStarted = 'game_started';
+  static const puzzleCompleted = 'puzzle_completed';
+  static const puzzleAbandoned = 'puzzle_abandoned';
+  static const hintUsed = 'hint_used';
+  static const wandUsed = 'wand_used';
+  static const undoUsed = 'undo_used';
+  static const powerupDepleted = 'powerup_depleted';
+  static const rewardedAdOffered = 'rewarded_ad_offered';
+  static const rewardedAdCompleted = 'rewarded_ad_completed';
+  static const rewardedAdDismissed = 'rewarded_ad_dismissed';
+  static const interstitialShown = 'interstitial_shown';
+  static const interstitialDismissed = 'interstitial_dismissed';
+  static const storeOpened = 'store_opened';
+  static const purchaseStarted = 'purchase_started';
+  static const purchaseCompleted = 'purchase_completed';
+  static const purchaseFailed = 'purchase_failed';
+  static const restorePurchases = 'restore_purchases';
+  static const leaderboardOpened = 'leaderboard_opened';
+
+  static const platform = 'platform';
+  static const difficulty = 'difficulty';
+  static const level = 'level';
+  static const lastDifficulty = 'last_difficulty';
+  static const lastLevel = 'last_level';
+  static const source = 'source';
+  static const boardSize = 'board_size';
+  static const elapsedSec = 'elapsed_sec';
+  static const hintsUsed = 'hints_used';
+  static const wandUsedCount = 'wand_used';
+  static const undoCount = 'undo_count';
+  static const winVariant = 'win_variant';
+  static const flawless = 'flawless';
+  static const hintsRemaining = 'hints_remaining';
+  static const wandsRemaining = 'wands_remaining';
+  static const ghostCount = 'ghost_count';
+  static const type = 'type';
+  static const rewardAmount = 'reward_amount';
+  static const puzzlesCompleted = 'puzzles_completed';
+  static const sku = 'sku';
+  static const price = 'price';
+  static const errorCode = 'error_code';
+  static const restoredCount = 'restored_count';
+}

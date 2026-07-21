@@ -9,13 +9,43 @@ import 'game_screen.dart';
 
 /// The main menu: pick a difficulty, jump back into your last game, or open
 /// settings / leaderboard.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  void _play(BuildContext context, PuzzleDifficulty difficulty) {
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final scope = AppScope.of(context);
+      scope.analytics.logHomeViewed(
+        lastDifficulty: scope.settings.lastDifficulty,
+        lastLevel: scope.settings.levelFor(scope.settings.lastDifficulty),
+      );
+    });
+  }
+
+  void _play(
+    BuildContext context, {
+    required PuzzleDifficulty difficulty,
+    required String source,
+  }) {
     final scope = AppScope.of(context);
     final level = scope.settings.levelFor(difficulty);
     scope.settings.lastDifficulty = difficulty;
+    if (source == 'difficulty_card') {
+      scope.analytics.logDifficultySelected(difficulty);
+    }
+    scope.analytics.logPlayTapped(
+      difficulty: difficulty,
+      level: level,
+      source: source,
+    );
     scope.game.loadLevel(level, difficulty: difficulty);
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const GameScreen()),
@@ -43,11 +73,14 @@ class HomeScreen extends StatelessWidget {
                   Align(
                     alignment: Alignment.topRight,
                     child: IconButton(
-                      onPressed: () => SettingsSheet.show(
-                        context,
-                        settings: scope.settings,
-                        game: scope.game,
-                      ),
+                      onPressed: () {
+                        scope.analytics.logSettingsOpened('home');
+                        SettingsSheet.show(
+                          context,
+                          settings: scope.settings,
+                          game: scope.game,
+                        );
+                      },
                       icon: Icon(Icons.settings_outlined,
                           color: colors.headerText),
                     ),
@@ -77,7 +110,11 @@ class HomeScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      onPressed: () => _play(context, lastDifficulty),
+                      onPressed: () => _play(
+                        context,
+                        difficulty: lastDifficulty,
+                        source: 'continue',
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -109,7 +146,11 @@ class HomeScreen extends StatelessWidget {
                         level: scope.settings.levelFor(d),
                         selected: d == lastDifficulty,
                         colors: colors,
-                        onTap: () => _play(context, d),
+                        onTap: () => _play(
+                          context,
+                          difficulty: d,
+                          source: 'difficulty_card',
+                        ),
                       ),
                     ),
                   const SizedBox(height: 12),
@@ -200,9 +241,12 @@ class _LeaderboardRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Leaderboard is coming soon!')),
-      ),
+      onTap: () {
+        AppScope.of(context).analytics.logLeaderboardOpened();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Leaderboard is coming soon!')),
+        );
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
