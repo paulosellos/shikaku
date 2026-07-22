@@ -90,7 +90,7 @@ class _BoardViewState extends State<BoardView> {
                     if (!mounted || _pressRow == null || _pressCol == null) {
                       return;
                     }
-                    if (game.rectAt(_pressRow!, _pressCol!) != null) {
+                    if (game.isRemovableAt(_pressRow!, _pressCol!)) {
                       game.eraseAt(_pressRow!, _pressCol!);
                       _longPressHandled = true;
                       _downPosition = null;
@@ -150,6 +150,7 @@ class _BoardViewState extends State<BoardView> {
                     placed: game.placed,
                     preview: game.preview,
                     previewColorIndex: game.previewColorIndex,
+                    previewAreaMatchesClue: game.previewAreaMatchesClue,
                     hintGhosts: game.hintGhosts,
                     colors: colors,
                     cell: cell,
@@ -169,6 +170,7 @@ class _BoardPainter extends CustomPainter {
   final List<PlacedRect> placed;
   final GridRect? preview;
   final int previewColorIndex;
+  final bool previewAreaMatchesClue;
   final List<HintGhost> hintGhosts;
   final AppColors colors;
   final double cell;
@@ -178,6 +180,7 @@ class _BoardPainter extends CustomPainter {
     required this.placed,
     required this.preview,
     required this.previewColorIndex,
+    required this.previewAreaMatchesClue,
     required this.hintGhosts,
     required this.colors,
     required this.cell,
@@ -212,13 +215,30 @@ class _BoardPainter extends CustomPainter {
         gr.height * cell - 2 * margin,
       );
       final rrect = RRect.fromRectAndRadius(rect, radius);
-      final fill = Paint()..color = RectPalette.at(p.colorIndex, colors.isDark);
+      final base = RectPalette.at(p.colorIndex, colors.isDark);
+      final fill = Paint()
+        ..color = p.wandPlaced
+            ? Color.lerp(base, colors.background, 0.12)!
+            : base;
       canvas.drawRRect(rrect, fill);
-      final border = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = cell * 0.02
-        ..color = Colors.black.withValues(alpha: 0.12);
-      canvas.drawRRect(rrect, border);
+      if (p.wandPlaced) {
+        _drawDashedRRect(
+          canvas,
+          rrect,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = cell * 0.035
+            ..color = colors.headerText.withValues(alpha: 0.35),
+          dash: cell * 0.1,
+          gap: cell * 0.07,
+        );
+      } else {
+        final border = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cell * 0.02
+          ..color = Colors.black.withValues(alpha: 0.12);
+        canvas.drawRRect(rrect, border);
+      }
     }
 
     // Ghost hints — each uses its assigned palette slot.
@@ -257,12 +277,17 @@ class _BoardPainter extends CustomPainter {
       );
       final rrect = RRect.fromRectAndRadius(rect, radius);
       final base = RectPalette.at(previewColorIndex, colors.isDark);
-      final fill = Paint()..color = base.withValues(alpha: 0.55);
+      final vivid = Color.lerp(base, colors.rectText, 0.12)!;
+      final fill = Paint()
+        ..color = (previewAreaMatchesClue ? vivid : base)
+            .withValues(alpha: previewAreaMatchesClue ? 0.78 : 0.55);
       canvas.drawRRect(rrect, fill);
       final border = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = cell * 0.02
-        ..color = Colors.black.withValues(alpha: 0.18);
+        ..strokeWidth = cell * (previewAreaMatchesClue ? 0.045 : 0.02)
+        ..color = previewAreaMatchesClue
+            ? vivid.withValues(alpha: 0.95)
+            : Colors.black.withValues(alpha: 0.18);
       canvas.drawRRect(rrect, border);
     }
 
@@ -276,8 +301,21 @@ class _BoardPainter extends CustomPainter {
       final owners = placed
           .where((p) => p.rect.containsCell(clue.row, clue.col))
           .length;
-      final color = owners == 1 ? colors.rectText : colors.cellText;
-      _drawNumber(canvas, clue.value, center, color);
+      var color = owners == 1 ? colors.rectText : colors.cellText;
+      if (previewAreaMatchesClue &&
+          pv != null &&
+          pv.containsCell(clue.row, clue.col)) {
+        color = colors.rectText;
+      }
+      _drawNumber(
+        canvas,
+        clue.value,
+        center,
+        color,
+        emphasized: previewAreaMatchesClue &&
+            pv != null &&
+            pv.containsCell(clue.row, clue.col),
+      );
     }
   }
 
@@ -299,14 +337,20 @@ class _BoardPainter extends CustomPainter {
     }
   }
 
-  void _drawNumber(Canvas canvas, int value, Offset center, Color color) {
+  void _drawNumber(
+    Canvas canvas,
+    int value,
+    Offset center,
+    Color color, {
+    bool emphasized = false,
+  }) {
     final tp = TextPainter(
       text: TextSpan(
         text: '$value',
         style: TextStyle(
           fontFamily: AppTheme.serif,
-          fontSize: cell * 0.4,
-          fontWeight: FontWeight.w700,
+          fontSize: cell * (emphasized ? 0.42 : 0.4),
+          fontWeight: emphasized ? FontWeight.w800 : FontWeight.w700,
           color: color,
         ),
       ),
@@ -320,6 +364,7 @@ class _BoardPainter extends CustomPainter {
       old.placed != placed ||
       old.preview != preview ||
       old.previewColorIndex != previewColorIndex ||
+      old.previewAreaMatchesClue != previewAreaMatchesClue ||
       old.hintGhosts != hintGhosts ||
       old.colors.isDark != colors.isDark ||
       old.cell != cell;

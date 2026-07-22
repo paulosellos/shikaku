@@ -23,6 +23,7 @@ class GameController extends ChangeNotifier {
   int? _dragStartRow;
   int? _dragStartCol;
   GridRect? _preview;
+  bool _previewAreaMatchActive = false;
   int _colorCounter = 0;
 
   int hintsLeft = 6;
@@ -44,6 +45,9 @@ class GameController extends ChangeNotifier {
   List<PlacedRect> get placed => List.unmodifiable(_placed);
   List<HintGhost> get hintGhosts => List.unmodifiable(_hintGhosts);
   GridRect? get preview => _preview;
+  /// True when the drag preview contains exactly one clue and its area equals
+  /// that clue's value (even if the rectangle is not the correct shape).
+  bool get previewAreaMatchesClue => _previewAreaMatchClueIndex() != null;
   /// Palette slot for the rectangle currently being drawn (preview).
   int get previewColorIndex => _colorCounter;
   bool get solved => _solved;
@@ -73,6 +77,7 @@ class GameController extends ChangeNotifier {
     _placed.clear();
     _history.clear();
     _preview = null;
+    _previewAreaMatchActive = false;
     _dragStartRow = null;
     _dragStartCol = null;
     _colorCounter = 0;
@@ -101,6 +106,7 @@ class GameController extends ChangeNotifier {
     _noteClueInteraction(row, col);
     _dragStartRow = row;
     _dragStartCol = col;
+    _previewAreaMatchActive = false;
     _preview = GridRect.fromCorners(row, col, row, col);
     notifyListeners();
   }
@@ -112,7 +118,14 @@ class GameController extends ChangeNotifier {
     final next = GridRect.fromCorners(_dragStartRow!, _dragStartCol!, r, c);
     if (next != _preview) {
       _preview = next;
-      _tick();
+      final matches = _previewAreaMatchClueIndex() != null;
+      if (matches && !_previewAreaMatchActive) {
+        _previewAreaMatchActive = true;
+        _areaMatchSnap();
+      } else if (!matches) {
+        _previewAreaMatchActive = false;
+        _tick();
+      }
       notifyListeners();
     }
   }
@@ -124,6 +137,7 @@ class GameController extends ChangeNotifier {
     _dragStartRow = null;
     _dragStartCol = null;
     _preview = null;
+    _previewAreaMatchActive = false;
 
     if (rect == null) {
       notifyListeners();
@@ -136,7 +150,7 @@ class GameController extends ChangeNotifier {
       if (startR != null && startC != null) {
         _noteClueInteraction(startR, startC);
         final existing = _rectAt(startR, startC);
-        if (existing != null) {
+        if (existing != null && !existing.wandPlaced) {
           _pushHistory();
           _placed.remove(existing);
           _tick();
@@ -151,18 +165,23 @@ class GameController extends ChangeNotifier {
   }
 
   void _commitRect(GridRect rect) {
+    if (_intersectsWandPlaced(rect)) return;
+
     _pushHistory();
-    _placed.removeWhere((p) => p.rect.intersects(rect));
+    _placed.removeWhere((p) => p.rect.intersects(rect) && !p.wandPlaced);
     _placed.add(PlacedRect(rect, _colorCounter++));
     _hintGhosts.removeWhere((h) => h.rect == rect);
     _checkSolved();
   }
 
+  bool _intersectsWandPlaced(GridRect rect) =>
+      _placed.any((p) => p.wandPlaced && p.rect.intersects(rect));
+
   // --- Tools ----------------------------------------------------------------
 
   void eraseAt(int row, int col) {
     final existing = _rectAt(row, col);
-    if (existing == null) return;
+    if (existing == null || existing.wandPlaced) return;
     _pushHistory();
     _placed.remove(existing);
     _tick();
@@ -207,8 +226,8 @@ class GameController extends ChangeNotifier {
 
     final sol = target.$2;
     _pushHistory();
-    _placed.removeWhere((p) => p.rect.intersects(sol));
-    _placed.add(PlacedRect(sol, _colorCounter++));
+    _placed.removeWhere((p) => p.rect.intersects(sol) && !p.wandPlaced);
+    _placed.add(PlacedRect(sol, _colorCounter++, wandPlaced: true));
     _hintGhosts.removeWhere((h) => h.clueIndex == target.$1);
     wandsLeft--;
     wandUsed++;
@@ -245,6 +264,11 @@ class GameController extends ChangeNotifier {
   }
 
   PlacedRect? rectAt(int row, int col) => _rectAt(row, col);
+
+  bool isRemovableAt(int row, int col) {
+    final existing = _rectAt(row, col);
+    return existing != null && !existing.wandPlaced;
+  }
 
   ValidationResult evaluate() => _validator.evaluate(_puzzle, _placed);
 
@@ -302,6 +326,25 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  /// Clue index when [preview] contains exactly one clue and its area matches
+  /// that clue's value; otherwise `null`.
+  int? _previewAreaMatchClueIndex() {
+    final pv = _preview;
+    if (pv == null) return null;
+
+    int? matched;
+    for (var i = 0; i < _puzzle.clues.length; i++) {
+      final clue = _puzzle.clues[i];
+      if (!pv.containsCell(clue.row, clue.col)) continue;
+      if (matched != null) return null;
+      matched = i;
+    }
+    if (matched == null) return null;
+
+    final clue = _puzzle.clues[matched];
+    return pv.area == clue.value ? matched : null;
+  }
+
   void _clearHintGhosts() {
     _hintGhosts.clear();
   }
@@ -321,6 +364,10 @@ class GameController extends ChangeNotifier {
 
   void _tick() {
     if (hapticsEnabled) HapticFeedback.selectionClick();
+  }
+
+  void _areaMatchSnap() {
+    if (hapticsEnabled) HapticFeedback.lightImpact();
   }
 
   void _heavyTick() {

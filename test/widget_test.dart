@@ -98,6 +98,37 @@ void main() {
     expect(game.placed.first.rect.area, 2);
   });
 
+  test('previewAreaMatchesClue when area equals single contained clue', () {
+    for (var seed = 1; seed <= 80; seed++) {
+      final game = GameController(1, seed: seed)..hapticsEnabled = false;
+      final puzzle = game.puzzle;
+      for (var i = 0; i < puzzle.clues.length; i++) {
+        final clue = puzzle.clues[i];
+        final sol = puzzle.solution[i];
+        if (sol.width < 2 || sol.height < 2) continue;
+
+        final endCol = clue.col + clue.value - 1;
+        if (endCol >= puzzle.cols) continue;
+        final strip = GridRect(clue.row, clue.col, clue.value, 1);
+        if (strip == sol) continue;
+
+        var cluesInside = 0;
+        for (final other in puzzle.clues) {
+          if (strip.containsCell(other.row, other.col)) cluesInside++;
+        }
+        if (cluesInside != 1) continue;
+
+        game.startDrag(clue.row, clue.col);
+        game.updateDrag(clue.row, endCol);
+        expect(game.preview!.area, clue.value);
+        expect(game.preview, isNot(sol));
+        expect(game.previewAreaMatchesClue, isTrue);
+        return;
+      }
+    }
+    fail('could not find a puzzle with a wrong-shape area match');
+  });
+
   test('hint shows ghost preview without placing a rectangle', () {
     final game = GameController(1, seed: 42)..hapticsEnabled = false;
     final before = game.placed.length;
@@ -165,6 +196,7 @@ void main() {
     expect(game.wandUsed, 1);
     expect(game.wandsLeft, 0);
     expect(game.placed.length, 1);
+    expect(game.placed.first.wandPlaced, isTrue);
     expect(totalClues, greaterThan(1));
     expect(game.solved, isFalse);
   });
@@ -195,5 +227,35 @@ void main() {
 
     expect(game.placed.length, 1);
     expect(game.placed.first.rect, target.$2);
+    expect(game.placed.first.wandPlaced, isTrue);
+  });
+
+  test('wand-placed rectangle cannot be removed by tap or eraser', () {
+    final game = GameController(1, seed: 42)..hapticsEnabled = false;
+    game.useWand();
+    expect(game.placed, hasLength(1));
+
+    final wandRect = game.placed.first.rect;
+    game.eraseAt(wandRect.row, wandRect.col);
+    expect(game.placed, hasLength(1));
+
+    game.startDrag(wandRect.row, wandRect.col);
+    game.endDrag();
+    expect(game.placed, hasLength(1));
+    expect(game.isRemovableAt(wandRect.row, wandRect.col), isFalse);
+  });
+
+  test('drawing over a wand-placed rectangle is blocked', () {
+    final game = GameController(1, seed: 42)..hapticsEnabled = false;
+    game.useWand();
+    final wandRect = game.placed.first.rect;
+
+    game.startDrag(wandRect.row, wandRect.col);
+    game.updateDrag(wandRect.bottom - 1, wandRect.right - 1);
+    game.endDrag();
+
+    expect(game.placed, hasLength(1));
+    expect(game.placed.first.wandPlaced, isTrue);
+    expect(game.placed.first.rect, wandRect);
   });
 }

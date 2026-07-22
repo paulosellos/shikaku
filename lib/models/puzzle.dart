@@ -87,8 +87,24 @@ class Puzzle {
 class PlacedRect {
   final GridRect rect;
   final int colorIndex;
+  /// Set when placed by the magic wand — not removable by tap, long-press, or eraser.
+  final bool wandPlaced;
 
-  const PlacedRect(this.rect, this.colorIndex);
+  const PlacedRect(
+    this.rect,
+    this.colorIndex, {
+    this.wandPlaced = false,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlacedRect &&
+      other.rect == rect &&
+      other.colorIndex == colorIndex &&
+      other.wandPlaced == wandPlaced;
+
+  @override
+  int get hashCode => Object.hash(rect, colorIndex, wandPlaced);
 }
 
 /// A ghost hint outline for one unsolved region (not placed on the board).
