@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shikaku_game/services/ads_service.dart';
+import 'package:shikaku_game/services/analytics_service.dart';
 import 'package:shikaku_game/state/app_scope.dart';
 import 'package:shikaku_game/state/game_controller.dart';
 import 'package:shikaku_game/state/settings_controller.dart';
@@ -20,6 +21,7 @@ void main() {
 
     final settings = SettingsController();
     final ads = AdsService();
+    final analytics = AnalyticsService();
     final game = GameController(2)..hapticsEnabled = false;
 
     await tester.pumpWidget(
@@ -27,6 +29,7 @@ void main() {
         settings: settings,
         game: game,
         ads: ads,
+        analytics: analytics,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.build(Brightness.dark),
@@ -59,6 +62,7 @@ void main() {
 
     final settings = SettingsController();
     final ads = AdsService();
+    final analytics = AnalyticsService();
     final game = GameController(2)..hapticsEnabled = false;
 
     await tester.pumpWidget(
@@ -66,6 +70,7 @@ void main() {
         settings: settings,
         game: game,
         ads: ads,
+        analytics: analytics,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.build(Brightness.light),

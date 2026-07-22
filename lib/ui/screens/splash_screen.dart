@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../state/app_scope.dart';
 import '../../theme/app_theme.dart';
 import 'home_screen.dart';
 
@@ -30,6 +31,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _goHome() {
     if (!mounted) return;
+    AppScope.of(context).analytics.logSplashCompleted();
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 400),

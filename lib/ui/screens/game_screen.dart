@@ -12,6 +12,7 @@ import '../widgets/settings_sheet.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/win_overlay.dart';
 import '../widgets/win_screens/win_screen_picker.dart';
+import '../widgets/win_screens/win_screen_variant.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -23,6 +24,7 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   bool _eraseMode = false;
   bool _winShown = false;
+  bool _loggedGameStart = false;
   GameController? _game;
 
   @override
@@ -33,6 +35,16 @@ class _GameScreenState extends State<GameScreen> {
       _game?.removeListener(_onGameChanged);
       _game = game;
       _game!.addListener(_onGameChanged);
+      _loggedGameStart = false;
+    }
+    if (!_loggedGameStart) {
+      _loggedGameStart = true;
+      final scope = AppScope.of(context);
+      scope.analytics.logGameStarted(
+        difficulty: game.difficulty,
+        level: game.puzzle.level,
+        boardSize: game.puzzle.rows,
+      );
     }
   }
 
@@ -55,6 +67,16 @@ class _GameScreenState extends State<GameScreen> {
       wandUsed: game.wandUsed,
       undoCount: game.undoCount,
     );
+    scope.analytics.logPuzzleCompleted(
+      difficulty: game.difficulty,
+      level: game.puzzle.level,
+      elapsedSec: game.elapsed.inSeconds,
+      hintsUsed: game.hintsUsed,
+      wandUsed: game.wandUsed,
+      undoCount: game.undoCount,
+      winVariant: variant.name,
+      flawless: game.hintsUsed == 0 && game.wandUsed == 0,
+    );
     await Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
@@ -69,7 +91,11 @@ class _GameScreenState extends State<GameScreen> {
             scope.settings.setLevelFor(game.difficulty, nextLevel);
             if (scope.settings.shouldShowInterstitial &&
                 scope.ads.isInterstitialReady) {
+              await scope.analytics.logInterstitialShown(
+                puzzlesCompleted: scope.settings.puzzlesCompleted,
+              );
               await scope.ads.showInterstitialAd();
+              await scope.analytics.logInterstitialDismissed();
             }
             game.loadLevel(nextLevel);
           },
@@ -94,7 +120,17 @@ class _GameScreenState extends State<GameScreen> {
     final ads = scope.ads;
     final colors = AppColors.of(context);
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop || game.solved) return;
+        scope.analytics.logPuzzleAbandoned(
+          difficulty: game.difficulty,
+          level: game.puzzle.level,
+          elapsedSec: game.elapsed.inSeconds,
+        );
+      },
+      child: Scaffold(
       body: SafeArea(
         child: AnimatedBuilder(
           animation: Listenable.merge([game, settings, ads]),
@@ -107,11 +143,14 @@ class _GameScreenState extends State<GameScreen> {
                   colors: colors,
                   onBack: () => Navigator.of(context).maybePop(),
                   onHelp: () => _showHelp(context, colors),
-                  onSettings: () => SettingsSheet.show(
-                    context,
-                    settings: settings,
-                    game: game,
-                  ),
+                  onSettings: () {
+                    scope.analytics.logSettingsOpened('game');
+                    SettingsSheet.show(
+                      context,
+                      settings: settings,
+                      game: game,
+                    );
+                  },
                 ),
                 if (settings.showTimer || settings.showSizeCounter)
                   _StatusBar(colors: colors),
@@ -136,7 +175,10 @@ class _GameScreenState extends State<GameScreen> {
                         game.hintsLeft == 0 && ads.isRewardedReady,
                     onEraseToggle: () =>
                         setState(() => _eraseMode = !_eraseMode),
-                    onUndo: game.undo,
+                    onUndo: () {
+                      game.undo();
+                      scope.analytics.logUndoUsed(undoCount: game.undoCount);
+                    },
                     onWand: () => _onWandTap(context, game, colors),
                     onHint: () => _onHintTap(context, game, colors),
                   ),
@@ -146,6 +188,7 @@ class _GameScreenState extends State<GameScreen> {
           },
         ),
       ),
+    ),
     );
   }
 
@@ -159,6 +202,7 @@ class _GameScreenState extends State<GameScreen> {
       await _confirmWand(context, game, colors);
       return;
     }
+    AppScope.of(context).analytics.logPowerupDepleted('wand');
     await _offerRewardedWand(context, colors);
   }
 
@@ -168,16 +212,27 @@ class _GameScreenState extends State<GameScreen> {
     AppColors colors,
   ) async {
     if (game.solved) return;
+    final scope = AppScope.of(context);
     if (game.hintsLeft > 0) {
       game.useHint();
+      scope.analytics.logHintUsed(
+        hintsRemaining: game.hintsLeft,
+        ghostCount: game.hintGhosts.length,
+      );
       return;
     }
+    scope.analytics.logPowerupDepleted('hint');
     await _offerRewardedHints(context, colors);
   }
 
   Future<void> _offerRewardedWand(BuildContext context, AppColors colors) async {
     final scope = AppScope.of(context);
     if (!scope.ads.isRewardedReady) return;
+    const rewardAmount = 1;
+    await scope.analytics.logRewardedAdOffered(
+      type: 'wand',
+      rewardAmount: rewardAmount,
+    );
     final watch = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -199,10 +254,21 @@ class _GameScreenState extends State<GameScreen> {
         ],
       ),
     );
-    if (watch != true || !context.mounted) return;
+    if (watch != true || !context.mounted) {
+      if (watch == false) {
+        await scope.analytics.logRewardedAdDismissed('wand');
+      }
+      return;
+    }
     final earned = await scope.ads.showRewardedAd();
     if (earned && context.mounted) {
-      scope.game.addWandCharges(1);
+      scope.game.addWandCharges(rewardAmount);
+      await scope.analytics.logRewardedAdCompleted(
+        type: 'wand',
+        rewardAmount: rewardAmount,
+      );
+    } else if (context.mounted) {
+      await scope.analytics.logRewardedAdDismissed('wand');
     }
   }
 
@@ -212,6 +278,11 @@ class _GameScreenState extends State<GameScreen> {
   ) async {
     final scope = AppScope.of(context);
     if (!scope.ads.isRewardedReady) return;
+    const rewardAmount = 2;
+    await scope.analytics.logRewardedAdOffered(
+      type: 'hint',
+      rewardAmount: rewardAmount,
+    );
     final watch = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -233,10 +304,21 @@ class _GameScreenState extends State<GameScreen> {
         ],
       ),
     );
-    if (watch != true || !context.mounted) return;
+    if (watch != true || !context.mounted) {
+      if (watch == false) {
+        await scope.analytics.logRewardedAdDismissed('hint');
+      }
+      return;
+    }
     final earned = await scope.ads.showRewardedAd();
     if (earned && context.mounted) {
-      scope.game.addHintCharges(2);
+      scope.game.addHintCharges(rewardAmount);
+      await scope.analytics.logRewardedAdCompleted(
+        type: 'hint',
+        rewardAmount: rewardAmount,
+      );
+    } else if (context.mounted) {
+      await scope.analytics.logRewardedAdDismissed('hint');
     }
   }
 
@@ -270,6 +352,9 @@ class _GameScreenState extends State<GameScreen> {
     );
     if (use == true && context.mounted) {
       game.useWand();
+      AppScope.of(context).analytics.logWandUsed(
+        wandsRemaining: game.wandsLeft,
+      );
     }
   }
 
