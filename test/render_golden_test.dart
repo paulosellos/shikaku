@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shikaku_game/services/ads_service.dart';
 import 'package:shikaku_game/services/purchase_service.dart';
 import 'package:shikaku_game/services/analytics_service.dart';
+import 'package:shikaku_game/state/wallet_controller.dart';
 import 'package:shikaku_game/state/app_scope.dart';
 import 'package:shikaku_game/state/game_controller.dart';
 import 'package:shikaku_game/state/settings_controller.dart';
@@ -24,12 +25,16 @@ void main() {
     final ads = AdsService();
     final analytics = AnalyticsService();
     final purchases = PurchaseService();
-    final game = GameController(2)..hapticsEnabled = false;
+    final wallet = WalletController();
+    final game = GameController(2)
+      ..hapticsEnabled = false
+      ..wallet = wallet;
 
     await tester.pumpWidget(
       AppScope(
         settings: settings,
         game: game,
+        wallet: wallet,
         ads: ads,
         analytics: analytics,
         purchases: purchases,
@@ -67,12 +72,16 @@ void main() {
     final ads = AdsService();
     final analytics = AnalyticsService();
     final purchases = PurchaseService();
-    final game = GameController(2)..hapticsEnabled = false;
+    final wallet = WalletController();
+    final game = GameController(2)
+      ..hapticsEnabled = false
+      ..wallet = wallet;
 
     await tester.pumpWidget(
       AppScope(
         settings: settings,
         game: game,
+        wallet: wallet,
         ads: ads,
         analytics: analytics,
         purchases: purchases,

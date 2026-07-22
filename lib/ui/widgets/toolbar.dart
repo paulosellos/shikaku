@@ -6,10 +6,10 @@ import '../../theme/app_theme.dart';
 class GameToolbar extends StatelessWidget {
   final bool eraseActive;
   final bool canUndo;
-  final int wandsLeft;
-  final int hintsLeft;
-  final bool wandRewardAvailable;
-  final bool hintRewardAvailable;
+  final int hintsAvailable;
+  final int wandsAvailable;
+  final bool wandOfferAvailable;
+  final bool hintOfferAvailable;
   final VoidCallback onEraseToggle;
   final VoidCallback onUndo;
   final VoidCallback onWand;
@@ -19,10 +19,10 @@ class GameToolbar extends StatelessWidget {
     super.key,
     required this.eraseActive,
     required this.canUndo,
-    required this.wandsLeft,
-    required this.hintsLeft,
-    this.wandRewardAvailable = false,
-    this.hintRewardAvailable = false,
+    required this.wandsAvailable,
+    required this.hintsAvailable,
+    this.wandOfferAvailable = false,
+    this.hintOfferAvailable = false,
     required this.onEraseToggle,
     required this.onUndo,
     required this.onWand,
@@ -50,17 +50,17 @@ class GameToolbar extends StatelessWidget {
         _ToolButton(
           icon: Icons.auto_fix_high_outlined,
           colors: colors,
-          enabled: wandsLeft > 0 || wandRewardAvailable,
-          badge: wandsLeft > 0 ? wandsLeft : null,
-          rewardOffer: wandsLeft == 0 && wandRewardAvailable,
+          enabled: wandsAvailable > 0 || wandOfferAvailable,
+          badge: wandsAvailable > 0 ? wandsAvailable : null,
+          rewardOffer: wandsAvailable == 0 && wandOfferAvailable,
           onTap: onWand,
         ),
         _ToolButton(
           icon: Icons.lightbulb_outline_rounded,
           colors: colors,
-          enabled: hintsLeft > 0 || hintRewardAvailable,
-          badge: hintsLeft > 0 ? hintsLeft : null,
-          rewardOffer: hintsLeft == 0 && hintRewardAvailable,
+          enabled: hintsAvailable > 0 || hintOfferAvailable,
+          badge: hintsAvailable > 0 ? hintsAvailable : null,
+          rewardOffer: hintsAvailable == 0 && hintOfferAvailable,
           onTap: onHint,
         ),
       ],
