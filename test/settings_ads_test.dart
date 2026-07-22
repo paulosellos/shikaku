@@ -28,4 +28,15 @@ void main() {
     settings.recordPuzzleWin();
     expect(settings.shouldShowInterstitial, isFalse);
   });
+
+  test('ad-free users skip interstitials', () async {
+    final settings = SettingsController();
+    await settings.load();
+    settings.setAdFree(true);
+
+    settings.recordPuzzleWin();
+    settings.recordPuzzleWin();
+    settings.recordPuzzleWin();
+    expect(settings.shouldShowInterstitial, isFalse);
+  });
 }

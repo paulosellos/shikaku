@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../models/puzzle_difficulty.dart';
+import '../../models/store_product.dart';
 import '../../state/app_scope.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/mascot.dart';
 import '../widgets/settings_sheet.dart';
+import '../widgets/store_sheet.dart';
 import 'game_screen.dart';
 
 /// The main menu: pick a difficulty, jump back into your last game, or open
@@ -154,6 +156,53 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   const SizedBox(height: 12),
+                  if (!scope.settings.isAdFree)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: GestureDetector(
+                        onTap: () => StoreSheet.show(
+                          context,
+                          settings: scope.settings,
+                          purchases: scope.purchases,
+                          analytics: scope.analytics,
+                          source: 'home',
+                        ),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: colors.cell,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: colors.accent.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.block, color: colors.accent),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Go ad-free',
+                                  style: TextStyle(
+                                    color: colors.headerText,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                scope.purchases
+                                        .priceFor(StoreSkus.removeAds) ??
+                                    '\$4.99',
+                                style: AppTheme.monoLabel(colors),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   _LeaderboardRow(colors: colors),
                   const SizedBox(height: 16),
                 ],

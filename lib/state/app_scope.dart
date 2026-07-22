@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import 'game_controller.dart';
 import 'settings_controller.dart';
 import '../services/ads_service.dart';
 import '../services/analytics_service.dart';
+import '../services/purchase_service.dart';
 
 /// Exposes the shared controllers to the widget tree without extra packages.
 class AppScope extends InheritedWidget {
@@ -11,6 +12,7 @@ class AppScope extends InheritedWidget {
   final SettingsController settings;
   final AdsService ads;
   final AnalyticsService analytics;
+  final PurchaseService purchases;
 
   const AppScope({
     super.key,
@@ -18,6 +20,7 @@ class AppScope extends InheritedWidget {
     required this.settings,
     required this.ads,
     required this.analytics,
+    required this.purchases,
     required super.child,
   });
 
@@ -32,5 +35,6 @@ class AppScope extends InheritedWidget {
       game != oldWidget.game ||
       settings != oldWidget.settings ||
       ads != oldWidget.ads ||
-      analytics != oldWidget.analytics;
+      analytics != oldWidget.analytics ||
+      purchases != oldWidget.purchases;
 }

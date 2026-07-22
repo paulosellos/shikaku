@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../app_info.dart';
 import '../../models/puzzle_difficulty.dart';
+import '../../models/store_product.dart';
+import '../../state/app_scope.dart';
 import '../../state/game_controller.dart';
 import '../../state/settings_controller.dart';
 import '../../theme/app_theme.dart';
+import 'store_sheet.dart';
 
 /// The Settings bottom sheet: appearance and game preferences.
 class SettingsSheet extends StatelessWidget {
@@ -97,6 +100,41 @@ class SettingsSheet extends StatelessWidget {
                     _themeOption(colors, 'Light', ThemeMode.light),
                     _themeOption(colors, 'System', ThemeMode.system),
                   ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              _sectionLabel('Store', colors),
+              _card(
+                colors,
+                child: GestureDetector(
+                  onTap: () {
+                    final scope = AppScope.of(context);
+                    StoreSheet.show(
+                      context,
+                      settings: settings,
+                      purchases: scope.purchases,
+                      analytics: scope.analytics,
+                      source: 'settings',
+                    );
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    children: [
+                      Text(
+                        settings.isAdFree ? 'Ad-free unlocked' : 'Remove ads',
+                        style:
+                            TextStyle(color: colors.headerText, fontSize: 16),
+                      ),
+                      const Spacer(),
+                      if (!settings.isAdFree)
+                        Text(
+                          scopePriceLabel(context),
+                          style: AppTheme.monoLabel(colors),
+                        ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.chevron_right, color: colors.subtleText),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -251,6 +289,11 @@ class SettingsSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String scopePriceLabel(BuildContext context) {
+    return AppScope.of(context).purchases.priceFor(StoreSkus.removeAds) ??
+        '\$4.99';
   }
 
   Widget _themeOption(AppColors colors, String label, ThemeMode mode) {

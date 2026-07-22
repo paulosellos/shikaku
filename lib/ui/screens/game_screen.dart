@@ -9,6 +9,7 @@ import '../../state/settings_controller.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/board_view.dart';
 import '../widgets/settings_sheet.dart';
+import '../widgets/store_sheet.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/win_overlay.dart';
 import '../widgets/win_screens/win_screen_picker.dart';
@@ -96,6 +97,12 @@ class _GameScreenState extends State<GameScreen> {
               );
               await scope.ads.showInterstitialAd();
               await scope.analytics.logInterstitialDismissed();
+              if (mounted &&
+                  !scope.settings.isAdFree &&
+                  !scope.settings.interstitialUpsellShown) {
+                scope.settings.markInterstitialUpsellShown();
+                await _showAdFreeUpsell(context, scope);
+              }
             }
             game.loadLevel(nextLevel);
           },
@@ -190,6 +197,41 @@ class _GameScreenState extends State<GameScreen> {
       ),
     ),
     );
+  }
+
+  Future<void> _showAdFreeUpsell(BuildContext context, AppScope scope) async {
+    final colors = AppColors.of(context);
+    final openStore = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: colors.background,
+        title: Text('Tired of ads?', style: AppTheme.title(colors)),
+        content: Text(
+          'Remove interstitial ads forever with a one-time purchase.',
+          style: TextStyle(color: colors.headerText, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Not now', style: TextStyle(color: colors.subtleText)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child:
+                Text('View store', style: TextStyle(color: colors.accent)),
+          ),
+        ],
+      ),
+    );
+    if (openStore == true && context.mounted) {
+      await StoreSheet.show(
+        context,
+        settings: scope.settings,
+        purchases: scope.purchases,
+        analytics: scope.analytics,
+        source: 'interstitial_upsell',
+      );
+    }
   }
 
   Future<void> _onWandTap(

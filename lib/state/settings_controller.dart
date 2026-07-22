@@ -13,6 +13,8 @@ class SettingsController extends ChangeNotifier {
   static const _kLastPuzzleDifficulty = 'last_difficulty';
   static const _kLevelPrefix = 'current_level_';
   static const _kPuzzlesCompleted = 'puzzles_completed';
+  static const _kIsAdFree = 'is_ad_free';
+  static const _kInterstitialUpsellShown = 'interstitial_upsell_shown';
 
   /// Show an interstitial after every N puzzle wins.
   static const interstitialEveryN = 3;
@@ -28,6 +30,8 @@ class SettingsController extends ChangeNotifier {
     PuzzleDifficulty.hard: 1,
   };
   int _puzzlesCompleted = 0;
+  bool _isAdFree = false;
+  bool _interstitialUpsellShown = false;
 
   ThemeMode get themeMode => _themeMode;
   bool get haptics => _haptics;
@@ -39,7 +43,12 @@ class SettingsController extends ChangeNotifier {
 
   int get puzzlesCompleted => _puzzlesCompleted;
 
+  bool get isAdFree => _isAdFree;
+
+  bool get interstitialUpsellShown => _interstitialUpsellShown;
+
   bool get shouldShowInterstitial =>
+      !_isAdFree &&
       _puzzlesCompleted > 0 &&
       _puzzlesCompleted % interstitialEveryN == 0;
 
@@ -59,6 +68,8 @@ class SettingsController extends ChangeNotifier {
       _levels[d] = p.getInt('$_kLevelPrefix${d.name}') ?? 1;
     }
     _puzzlesCompleted = p.getInt(_kPuzzlesCompleted) ?? 0;
+    _isAdFree = p.getBool(_kIsAdFree) ?? false;
+    _interstitialUpsellShown = p.getBool(_kInterstitialUpsellShown) ?? false;
     notifyListeners();
   }
 
@@ -101,6 +112,20 @@ class SettingsController extends ChangeNotifier {
   void recordPuzzleWin() {
     _puzzlesCompleted++;
     _prefs?.setInt(_kPuzzlesCompleted, _puzzlesCompleted);
+    notifyListeners();
+  }
+
+  void setAdFree(bool value) {
+    if (_isAdFree == value) return;
+    _isAdFree = value;
+    _prefs?.setBool(_kIsAdFree, value);
+    notifyListeners();
+  }
+
+  void markInterstitialUpsellShown() {
+    if (_interstitialUpsellShown) return;
+    _interstitialUpsellShown = true;
+    _prefs?.setBool(_kInterstitialUpsellShown, true);
     notifyListeners();
   }
 }
